@@ -2,7 +2,7 @@
 # pve-panel: customer panel (3000) + admin interface (3001) in one small image.
 # Pure JavaScript (no native modules), so it builds the same for amd64 and arm64.
 
-FROM node:22-bookworm-slim
+FROM node:26-bookworm-slim
 
 # Links the image on ghcr.io to its repository (also set by the CI workflow)
 LABEL org.opencontainers.image.source="https://github.com/sebastianflint/pve-panel" \
