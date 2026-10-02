@@ -12,6 +12,8 @@ Give users a clean, secure interface to manage **only their own virtual machines
 [![OIDC](https://img.shields.io/badge/Auth-OIDC%20%2B%202FA-6C63FF)](#-authentication)
 [![GHCR](https://img.shields.io/badge/Image-ghcr.io-181717?logo=github)](https://github.com/sebastianflint/pve-panel/pkgs/container/pve-panel)
 [![Release](https://img.shields.io/github/v/release/sebastianflint/pve-panel?label=Release)](https://github.com/sebastianflint/pve-panel/releases)
+[![Build & tests](https://github.com/sebastianflint/pve-panel/actions/workflows/docker-publish.yml/badge.svg?branch=main)](https://github.com/sebastianflint/pve-panel/actions/workflows/docker-publish.yml)
+[![CodeQL](https://github.com/sebastianflint/pve-panel/actions/workflows/codeql.yml/badge.svg?branch=main)](https://github.com/sebastianflint/pve-panel/actions/workflows/codeql.yml)
 [![Docs](https://img.shields.io/badge/Docs-website-3558E6)](https://sebastianflint.github.io/pve-panel/)
 [![AI-assisted](https://img.shields.io/badge/Built%20with-AI%20assistance-8A2BE2)](#-ai-assisted-development)
 
@@ -90,6 +92,7 @@ PVE Panel was built with substantial help from an AI assistant (**Claude by Anth
 
 **What this means for you**
 
+- An automated test suite (unit, API and browser tests) runs on every change, and releases are only published when it passes. It runs against a **simulated** Proxmox, so it can't replace validating your own environment.
 - Not every feature has been tested in every real-world combination — especially provider-specific setups (OIDC providers, mail servers, NAS models, Windows editions).
 - AI-generated code can contain mistakes, including security-relevant ones. Review the code and the [security model](#️-security-model) before using PVE Panel in production, and validate customer isolation yourself (see [Recommended validation](#-recommended-validation)).
 - Issues and pull requests are reviewed and handled by the maintainer.
@@ -1081,6 +1084,7 @@ Only these file names are served, with a strict sandbox policy. Make sure you're
 │       └── setup-gateway.sh
 │
 ├── scripts/
+├── test/               # unit, API and browser tests, simulated Proxmox
 ├── deploy/
 │   ├── docker-compose.yml
 │   └── docker-compose.portainer.yml
@@ -1090,6 +1094,8 @@ Only these file names are served, with a strict sandbox policy. Make sure you're
 ├── .github/
 │   ├── workflows/docker-publish.yml
 │   ├── workflows/docs.yml
+│   ├── workflows/test.yml
+│   ├── workflows/codeql.yml
 │   ├── dependabot.yml
 │   └── release.yml
 ├── Dockerfile
@@ -1214,6 +1220,27 @@ Confirm that:
 
 ---
 
+## 🧪 Automated tests
+
+Every change is tested on GitHub; releases are only published when all tests pass.
+
+| Layer | Covers |
+|---|---|
+| Unit | 2FA (RFC 6238 vectors), secret encryption, SSO account rules, guest agent handling |
+| API | the real panel against a simulated Proxmox: sign-in & 2FA, ownership, provisioning, networks, plan limits, reinstall, resize, email & invitations, VPN, Tailscale, customer deletion |
+| Browser | Playwright: sign-in, overview, server page, creating a server, admin views |
+
+Plus **CodeQL** code scanning on every change and weekly.
+
+```bash
+npm test            # unit + API tests
+npm run test:e2e    # browser tests (after: npx playwright install chromium)
+```
+
+Details: [Tests and quality](https://sebastianflint.github.io/pve-panel/docs/reference/testing).
+
+---
+
 ## 🗺️ Roadmap
 
 Potential future improvements include:
@@ -1241,7 +1268,7 @@ cd pve-panel
 git checkout -b feature/my-feature
 ```
 
-After making and testing your changes:
+After making your changes, run the tests (`npm test`, and `npm run test:e2e` for UI changes):
 
 ```bash
 git add .
