@@ -1,8 +1,9 @@
-node_modules
-data
-.env
 *.db
-*.db-wal
 *.db-shm
+*.db-wal
+.env
 .git
+data
+node_modules
 npm-debug.log
+website

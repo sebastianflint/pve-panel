@@ -1,0 +1,27 @@
+/* PVE Panel colours (signal blue, slate) for the documentation */
+:root {
+  --ifm-color-primary: #3558e6;
+  --ifm-color-primary-dark: #2547d6;
+  --ifm-color-primary-darker: #2243ca;
+  --ifm-color-primary-darkest: #1c37a6;
+  --ifm-color-primary-light: #4f6deb;
+  --ifm-color-primary-lighter: #5c78ec;
+  --ifm-color-primary-lightest: #8399f1;
+  --ifm-code-font-size: 92%;
+  --docusaurus-highlighted-code-line-bg: rgba(53, 88, 230, 0.1);
+}
+html[data-theme='dark'] {
+  --ifm-color-primary: #7c94ff;
+  --ifm-color-primary-dark: #5d7bff;
+  --ifm-color-primary-darker: #4e6eff;
+  --ifm-color-primary-darkest: #1f47ff;
+  --ifm-color-primary-light: #9badff;
+  --ifm-color-primary-lighter: #aabaff;
+  --ifm-color-primary-lightest: #d9e0ff;
+  --ifm-background-color: #0f1720;
+  --ifm-background-surface-color: #172230;
+  --ifm-navbar-background-color: #172230;
+  --ifm-footer-background-color: #0b121a;
+  --docusaurus-highlighted-code-line-bg: rgba(124, 148, 255, 0.15);
+}
+.screenshot { border: 1px solid var(--ifm-color-emphasis-300); border-radius: 12px; box-shadow: 0 8px 24px rgb(0 0 0 / 0.08); }

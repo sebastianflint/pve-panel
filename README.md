@@ -12,6 +12,7 @@ Give users a clean, secure interface to manage **only their own virtual machines
 [![OIDC](https://img.shields.io/badge/Auth-OIDC%20%2B%202FA-6C63FF)](#-authentication)
 [![GHCR](https://img.shields.io/badge/Image-ghcr.io-181717?logo=github)](https://github.com/sebastianflint/pve-panel/pkgs/container/pve-panel)
 [![Release](https://img.shields.io/github/v/release/sebastianflint/pve-panel?label=Release)](https://github.com/sebastianflint/pve-panel/releases)
+[![Docs](https://img.shields.io/badge/Docs-website-3558E6)](https://sebastianflint.github.io/pve-panel/)
 [![AI-assisted](https://img.shields.io/badge/Built%20with-AI%20assistance-8A2BE2)](#-ai-assisted-development)
 
 [Features](#-features) ·
@@ -24,7 +25,7 @@ Give users a clean, secure interface to manage **only their own virtual machines
 [Versions](#-versions--updates) ·
 [Security](#️-security-model) ·
 [AI use](#-ai-assisted-development) ·
-[Full guide](docs/GUIDE.md)
+[Documentation](https://sebastianflint.github.io/pve-panel/)
 
 </div>
 
@@ -65,7 +66,7 @@ The browser **never communicates directly with Proxmox VE** and never receives t
 
 The customer and administration portals run as **separate web servers** in the same process. They use separate session cookies and signing keys, and the customer-facing server does not expose administrator routes.
 
-> 📘 This README is the overview. Every setup step, permission, firewall rule and troubleshooting tip is in the **[administrator guide](docs/GUIDE.md)**.
+> 📘 This README is the overview. Every setup step, permission, firewall rule and troubleshooting tip is in the **[documentation](https://sebastianflint.github.io/pve-panel/)**.
 
 ---
 
@@ -77,7 +78,7 @@ PVE Panel was built with substantial help from an AI assistant (**Claude by Anth
 
 - most of the source code (backend, customer and admin portals, scripts)
 - the Docker, Compose and GitHub Actions setup
-- the documentation, including this README's content and the [administrator guide](docs/GUIDE.md)
+- the documentation, the README and the [documentation website](https://sebastianflint.github.io/pve-panel/)
 - automated tests during development, largely against simulated Proxmox, guest-agent, SMTP and WireGuard environments and a certified test OpenID provider
 - the screenshots, taken from such a test environment with sample data
 
@@ -672,7 +673,7 @@ http://localhost:3001/api/auth/oidc/callback
 
 Only the panel needs to reach the provider (outbound HTTPS); the provider never connects to the panel.
 
-> **Microsoft Entra ID** doesn't send `email_verified`: set `OIDC_REQUIRE_VERIFIED_EMAIL=false` together with `OIDC_ALLOWED_DOMAINS`. Provider notes are in the [guide](docs/GUIDE.md).
+> **Microsoft Entra ID** doesn't send `email_verified`: set `OIDC_REQUIRE_VERIFIED_EMAIL=false` together with `OIDC_ALLOWED_DOMAINS`. Provider notes are in the [documentation](https://sebastianflint.github.io/pve-panel/docs/security/single-sign-on).
 
 Once SSO is validated, local password login can optionally be disabled independently for each portal.
 
@@ -828,7 +829,7 @@ Customers can:
 
 Private keys are shown once and are not retained by the panel.
 
-The gateway is prepared once with `docs/vpn/setup-gateway.sh` — see the [guide](docs/GUIDE.md) for the routing and port-forward steps.
+The gateway is prepared once with `docs/vpn/setup-gateway.sh` — see the [documentation](https://sebastianflint.github.io/pve-panel/docs/networking/wireguard-vpn) for the routing and port-forward steps.
 
 ### Tailscale
 
@@ -1073,7 +1074,6 @@ Only these file names are served, with a strict sandbox policy. Make sure you're
 │   └── shared/
 │
 ├── docs/
-│   ├── GUIDE.md
 │   ├── screenshots/
 │   ├── windows/
 │   │   └── unattend.xml
@@ -1085,8 +1085,11 @@ Only these file names are served, with a strict sandbox policy. Make sure you're
 │   ├── docker-compose.yml
 │   └── docker-compose.portainer.yml
 │
+├── website/            # documentation website (Docusaurus)
+│
 ├── .github/
 │   ├── workflows/docker-publish.yml
+│   ├── workflows/docs.yml
 │   ├── dependabot.yml
 │   └── release.yml
 ├── Dockerfile
@@ -1303,6 +1306,6 @@ Give customers the controls they need — while keeping the hypervisor, credenti
 [⭐ Star the project](https://github.com/sebastianflint/pve-panel) ·
 [🐛 Report an issue](https://github.com/sebastianflint/pve-panel/issues) ·
 [📦 Container image](https://github.com/sebastianflint/pve-panel/pkgs/container/pve-panel) ·
-[📘 Administrator guide](docs/GUIDE.md)
+[📘 Documentation](https://sebastianflint.github.io/pve-panel/)
 
 </div>

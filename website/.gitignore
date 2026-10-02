@@ -1,0 +1,6 @@
+node_modules/
+build/
+.docusaurus/
+.cache-loader/
+# generated from ../example.env at build time
+docs/reference/configuration.md
