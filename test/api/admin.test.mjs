@@ -74,7 +74,7 @@ test('VPN: a device gets a config and lands on the gateway', async () => {
   const r = await leaving.post('/api/vpn/devices', { name: 'Laptop' });
   assert.equal(r.status, 201, r.text);
   assert.match(r.json.config, /\[Interface\][\s\S]*PrivateKey[\s\S]*\[Peer\]/);
-  await waitFor(() => /\[Peer\]/.test(stack.mock.gwFiles['/etc/wireguard/panel-peers.conf'] ?? ''), { what: 'gateway peer' });
+  await waitFor(() => /\[Peer\]/.test(stack.mock.gwFiles.get('/etc/wireguard/panel-peers.conf') ?? ''), { what: 'gateway peer' });
 });
 
 test('admin server actions: assigned servers yes, the VPN gateway never', async () => {
@@ -100,6 +100,6 @@ test('deleting a customer removes servers, VPN devices, the private network and 
   assert.equal(stack.mock.vms.has(102), false, 'assigned server destroyed');
   assert.equal(stack.mock.vms.has(leavingVm), false, 'own server destroyed');
   assert.equal(stack.mock.sdn.vnets.some((v) => v.vnet === 'cu0001'), false, 'VNet removed');
-  assert.equal(/\[Peer\]/.test(stack.mock.gwFiles['/etc/wireguard/panel-peers.conf'] ?? ''), false, 'VPN peer removed');
+  assert.equal(/\[Peer\]/.test(stack.mock.gwFiles.get('/etc/wireguard/panel-peers.conf') ?? ''), false, 'VPN peer removed');
   assert.equal((await leaving.get('/api/vms')).status, 401, 'session no longer valid');
 });
