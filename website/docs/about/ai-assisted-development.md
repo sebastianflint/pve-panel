@@ -21,6 +21,7 @@ PVE Panel was built with substantial help from an AI assistant (**Claude by Anth
 
 **What this means for you**
 
+- An automated test suite (unit, API and browser tests) runs on every change, and releases are only published when it passes. It runs against a **simulated** Proxmox, so it can't replace validating your own environment — see [Tests and quality](../reference/testing.md).
 - Not every feature has been tested in every real-world combination — especially provider-specific setups (OIDC providers, mail servers, NAS models, Windows editions).
 - AI-generated code can contain mistakes, including security-relevant ones. Review the code and the [security model](../security/security-model.md) before using PVE Panel in production, and validate customer isolation yourself (see [Recommended validation](../security/security-model.md)).
 - Issues and pull requests are reviewed and handled by the maintainer.

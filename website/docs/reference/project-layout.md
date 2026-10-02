@@ -35,3 +35,6 @@ Dockerfile, docker-compose.yml, Caddyfile   container setup (optional HTTPS via 
 deploy/docker-compose.yml                    run the prebuilt image from ghcr.io
 .github/                                     image build workflow, Dependabot
 ```
+
+Tests live in `test/` (unit, API and browser tests with a simulated Proxmox) — see
+[Tests and quality](testing.md). The documentation website is in `website/`.

@@ -1,0 +1,215 @@
+// Simulated Proxmox VE API for tests: VMs, templates, clones, tasks, SDN,
+// firewall, snapshots, guest agent (incl. Windows setup and Tailscale), the
+// WireGuard gateway VM and a VNC endpoint. Every call to startMockPve() has its
+// own fresh state and listens on a free port.
+//
+// Test controls (plain HTTP GET on the mock, under /api2/json):
+//   /__flaky/<vmid>/<n>          next n guest-exec-status answers time out
+//   /__lose/<vmid>/<n>[/<text>]  lose n finished exec results ("PID lld does not exist")
+//   /__tsapprove/<vmid>          approve the Tailscale subnet route
+//   /__tsowner/<vmid>            Tailscale logout refused (Windows profile owner)
+//   /__recovery/<vmid>           a Recovery partition blocks extending C:
+//   /__sdn, /__vms, /__gw        inspect state
+import http from 'node:http';
+import { WebSocketServer } from 'ws';
+
+const debug = process.env.MOCK_PVE_DEBUG === '1';
+// Debug output: values from requests are flattened to one line, so they can't fake log lines.
+const oneLine = (v) => {
+  const text = typeof v === 'string' ? v : v instanceof Error ? (v.stack || v.message) : JSON.stringify(v) ?? String(v);
+  return String(text).replace(/[\r\n\u2028\u2029]+/g, ' ');
+};
+const log = (...a) => { if (debug) console.log('[mock-pve]', ...a.map(oneLine)); };
+
+export async function startMockPve({ port = 0 } = {}) {
+  const vms = new Map([
+    [101, { vmid:101, node:'pve1', type:'qemu', name:'web01', status:'stopped', maxcpu:2, maxmem:4*2**30, maxdisk:20*2**30, cfg:{cores:2,memory:4096,ostype:'l26',scsi0:'VMStorage:vm-101-disk-0,size=20G'} }],
+    [102, { vmid:102, node:'pve1', type:'qemu', name:'other-customer', status:'running', maxcpu:2, maxmem:2*2**30, maxdisk:10*2**30, cfg:{cores:2,memory:2048} }],
+    [9000,{ vmid:9000,node:'pve1', type:'qemu', name:'debian12-cloud', status:'stopped', template:1, maxcpu:1, maxmem:2**30, maxdisk:3*2**30, cfg:{cores:1,memory:1024,ostype:'l26',agent:'1',boot:'order=scsi0',scsi0:'VMStorage:base-9000-disk-0,size=3G',ide2:'VMStorage:vm-9000-cloudinit,media=cdrom',ciuser:'debian'} }],
+    [9100,{ vmid:9100,node:'pve1', type:'qemu', name:'win2022-sysprep', status:'stopped', template:1, maxcpu:2, maxmem:4*2**30, maxdisk:40*2**30, cfg:{cores:2,memory:4096,ostype:'win11',agent:'1',boot:'order=scsi0',scsi0:'VMStorage:base-9100-disk-0,size=40G',net0:'e1000=BC:24:11:00:00:01,bridge=vmbr0'} }],
+    [9101,{ vmid:9101,node:'pve1', type:'qemu', name:'win2022-bad-unattend', status:'stopped', template:1, maxcpu:2, maxmem:4*2**30, maxdisk:40*2**30, cfg:{cores:2,memory:4096,ostype:'win11',agent:'1',scsi0:'VMStorage:base-9101-disk-0,size=40G',net0:'e1000=BC:24:11:00:00:02,bridge=vmbr0'} }],
+    [9102,{ vmid:9102,node:'pve1', type:'qemu', name:'win2022-locked-down', status:'stopped', template:1, maxcpu:2, maxmem:4*2**30, maxdisk:40*2**30, cfg:{cores:2,memory:4096,ostype:'win11',agent:'1',scsi0:'VMStorage:base-9102-disk-0,size=40G',net0:'virtio=BC:24:11:00:00:03,bridge=vmbr0'} }],
+    [150, { vmid:150, node:'pve1', type:'qemu', name:'vpn-gw', status:'running', maxcpu:1, maxmem:2**29, maxdisk:8*2**30, cfg:{cores:1,memory:512,agent:'1'} }],
+    [9001,{ vmid:9001,node:'pve1', type:'qemu', name:'ubuntu2404-cloud', status:'stopped', template:1, maxcpu:1, maxmem:2**30, maxdisk:4*2**30, cfg:{cores:1,memory:1024,ostype:'l26',scsi0:'VMStorage:base-9001-disk-0,size=3584M'} }],
+  ]);
+  const tasks = new Map(); let seq = 0;
+  const sdn = { zones: [], vnets: [], subnets: new Map(), pending: 0 };
+  const started = new Map([[150, 0]]); const gwFiles = new Map(); const GW_PUB = 'Qm9ndXNHYXRld2F5UHVibGljS2V5MTIzNDU2Nzg5MDA='; const execs = new Map(); let pidSeq = 100;
+  const task = (kind, vmid, ms=1500, then=()=>{}) => { const upid=`UPID:pve1:${(++seq).toString(16)}:0:${Date.now()}:${kind}:${vmid}:panel@pve!panel:`; tasks.set(upid, {done:Date.now()+ms, then, fired:true}); setTimeout(then, ms); return upid; };
+  const send = (res, data, code=200, msg) => { res.writeHead(code, msg || '', {'content-type':'application/json'}); res.end(JSON.stringify({data, message: msg})); };
+  const body = (req) => new Promise(r => { let b=''; req.on('data',c=>b+=c); req.on('end',()=>r(Object.fromEntries(new URLSearchParams(b)))); });
+  const destroyed = []; // DELETE calls, for assertions
+
+  const tsApproved = new Set();
+
+  const newMac = () => 'BC:24:11:' + Array.from({ length: 3 }, () => Math.floor(Math.random() * 256).toString(16).padStart(2, '0').toUpperCase()).join(':');
+  const withMac = (net) => (!net || /^\w+=[0-9A-Fa-f:]{17}/.test(net) ? net : net.replace(/^(\w+)/, `$1=${newMac()}`));
+  const flaky = new Map();
+  const lose = new Map(); const loseOnly = new Map();   // vmid -> number of finished results to 'lose' like a real agent
+  function tailscaleExec(vm, vmid, script, stdin) {
+    // returns { out, code, err } or null if the script isn't a Tailscale command
+    if (script.includes('install.sh') || script.includes('tailscale-setup-latest')) { log('TS install', vmid); return { out: 'installed\n', code: 0, err: '' }; }
+    if (/cat > \/run\/ts-authkey-/.test(script)) { vm.tsKey = stdin; return { out: '', code: 0, err: '' }; }
+    if (script.includes('tailscale up') || script.includes(' up --unattended')) {
+      const key = script.includes('--unattended') ? stdin : vm.tsKey;
+      const onCmdLine = key && script.includes(key);
+      log('TS up', vmid, 'key on command line:', onCmdLine ? 'YES!' : 'no', '| key file present:', !!key);
+      if (!key || key.startsWith('tskey-auth-bad')) return { out: '', code: 1, err: 'backend error: invalid key: API key does not exist\n' };
+      const host = /--hostname=([a-z0-9-]+)/.exec(script)?.[1];
+      const routes = /--advertise-routes=(\S+)/.exec(script)?.[1] ?? null;
+      vm.ts = { ip: `100.101.102.${vmid % 250}`, host, routes };
+      vm.tsKey = undefined;
+      return { out: script.includes('--unattended') ? 'connected\n' : '', code: 0, err: '' };
+    }
+    if (script.includes('status --json')) {
+      if (!vm.ts) return { out: JSON.stringify({ BackendState: 'NeedsLogin', Self: {} }), code: 0, err: '' };
+      return { out: JSON.stringify({ BackendState: 'Running', Self: { Online: true, HostName: vm.ts.host,
+        DNSName: `${vm.ts.host}.tail1234.ts.net.`, TailscaleIPs: [vm.ts.ip, 'fd7a:115c:a1e0::1'],
+        PrimaryRoutes: vm.ts.routes && tsApproved.has(vmid) ? [vm.ts.routes] : undefined } }), code: 0, err: '' };
+    }
+    if (script.includes('logout')) {
+      const hasFallback = script.includes('Stop-Service') || script.includes('systemctl stop tailscaled');
+      if (vm.tsForeign) {
+        if (!hasFallback) return { out: '', code: 1, err: '500 Internal Server Error: the target profile does not belong to the user\n' };
+        log('TS logout refused, local state wiped', vmid); vm.ts = undefined; vm.tsForeign = false;
+        return { out: 'forgotten: 500 Internal Server Error: the target profile does not belong to the user\n', code: 0, err: '' };
+      }
+      log('TS logout', vmid); vm.ts = undefined;
+      return { out: hasFallback ? 'logged-out\n' : '', code: 0, err: '' };
+    }
+    return null;
+  }
+  const srv = http.createServer(async (req, res) => {
+    const u = new URL(req.url, 'http://x'); const p = u.pathname.replace('/api2/json','');
+    if (req.headers.authorization !== 'PVEAPIToken=panel@pve!panel=x') return send(res, null, 401);
+    if (p === '/cluster/resources') return send(res, [...vms.values()].map(({cfg, ...v}) => ({...v, id:`qemu/${v.vmid}`, cpu:0.05, mem:v.maxmem/4, uptime: v.status==='running'?600:0})));
+    if (p === '/__gw') return send(res, Object.fromEntries(gwFiles));
+    if (p === '/__sdn') return send(res, { ...sdn, subnets: Object.fromEntries(sdn.subnets) });
+    if (p.startsWith('/__tsowner/')) { vms.get(Number(p.split('/')[2])).tsForeign = true; return send(res, 'ok'); }
+    if (p.startsWith('/__lose/')) { const [, , v, n, only] = p.split('/'); lose.set(Number(v), Number(n)); loseOnly.set(Number(v), only ? decodeURIComponent(only) : null); return send(res, 'ok'); }
+    if (p.startsWith('/__recovery/')) { vms.get(Number(p.split('/')[2])).recoveryAfterC = true; return send(res, 'ok'); }
+    if (p.startsWith('/__flaky/')) { const [, , v, n] = p.split('/'); flaky.set(Number(v), Number(n)); return send(res, 'ok'); }
+    if (p.startsWith('/__tsapprove/')) { tsApproved.add(Number(p.split('/')[2])); return send(res, 'approved'); }
+    if (p === '/__vms') return send(res, [...vms.keys()]);
+    if (p.startsWith('/__clearfw/')) { const v = vms.get(Number(p.split('/')[2])); v.fwRules = (v.fwRules ?? []).filter(r => r.type !== 'out'); return send(res, 'cleared'); }
+    if (p === '/cluster/nextid') { const want = u.searchParams.get('vmid'); if (want) return vms.has(Number(want)) ? send(res,null,400,`VM ${want} already exists`) : send(res, want); let id=100; while (vms.has(id)) id++; return send(res, String(id)); }
+    if (/^\/nodes\/[^/]+\/storage$/.test(p)) return send(res, [{storage:'VMStorage'},{storage:'local-lvm'}]);
+    if (p === '/cluster/sdn/zones' && req.method==='GET') return send(res, sdn.zones);
+    if (p === '/cluster/sdn/zones' && req.method==='POST') { const b = await body(req); log('SDN ZONE', JSON.stringify(b)); sdn.zones.push({zone:b.zone,type:b.type}); sdn.pending++; return send(res,null); }
+    if (p === '/cluster/sdn/vnets' && req.method==='GET') return send(res, sdn.vnets);
+    if (p === '/cluster/sdn/vnets' && req.method==='POST') { const b = await body(req); log('SDN VNET', JSON.stringify(b)); sdn.vnets.push({vnet:b.vnet,zone:b.zone,alias:b.alias}); sdn.subnets.set(b.vnet, []); sdn.pending++; return send(res,null); }
+    const sn = p.match(/^\/cluster\/sdn\/vnets\/([^/]+)\/subnets$/);
+    if (sn && req.method==='GET') return send(res, sdn.subnets.get(sn[1]) ?? []);
+    if (sn && req.method==='POST') { const b = await body(req); log('SDN SUBNET', sn[1], JSON.stringify(b)); sdn.subnets.get(sn[1]).push({cidr:b.subnet, subnet:`panel-${b.subnet.replace('/','-')}`}); sdn.pending++; return send(res,null); }
+    const vn = p.match(/^\/cluster\/sdn\/vnets\/([^/]+)$/);
+    if (vn && req.method==='PUT') { const b = await body(req); const v = sdn.vnets.find(x=>x.vnet===vn[1]); if (!v) return send(res,null,404); v.alias = b.alias; log('SDN VNET ALIAS', vn[1], JSON.stringify(b.alias)); sdn.pending++; return send(res,null); }
+    if (vn && req.method==='DELETE') { if ((sdn.subnets.get(vn[1]) ?? []).length) return send(res,null,500,'cannot delete vnet with subnets'); const inUse=[...vms.values()].some(x=>(x.cfg.net0??'').includes('bridge='+vn[1]+',')||(x.cfg.net0??'').endsWith('bridge='+vn[1])); if (inUse) return send(res,null,500,`vnet ${vn[1]} is used by a guest`); sdn.vnets=sdn.vnets.filter(x=>x.vnet!==vn[1]); log('SDN VNET DELETE', vn[1]); sdn.pending++; return send(res,null); }
+    const snd = p.match(/^\/cluster\/sdn\/vnets\/([^/]+)\/subnets\/(.+)$/);
+    if (snd && req.method==='DELETE') { const id = decodeURIComponent(snd[2]); sdn.subnets.set(snd[1], (sdn.subnets.get(snd[1]) ?? []).filter(x=>x.subnet!==id)); log('SDN SUBNET DELETE', snd[1], id); sdn.pending++; return send(res,null); }
+    if (p === '/cluster/sdn' && req.method==='PUT') { log('SDN APPLY pending', sdn.pending); sdn.pending=0; return send(res, task('reloadnetworkall', 0, 800)); }
+    const t = p.match(/\/tasks\/(.+)\/status$/);
+    if (t) { const x = tasks.get(decodeURIComponent(t[1])); if (!x) return send(res,null,404);
+      if (Date.now() > x.done) { if (!x.fired) { x.fired=true; x.then(); } return send(res,{status:'stopped',exitstatus:x.exit||'OK'}); } return send(res,{status:'running'}); }
+    const m = p.match(/^\/nodes\/([^/]+)\/qemu\/(\d+)(\/.*)?$/);
+    if (!m) return send(res, null, 501);
+    const vmid = Number(m[2]); const rest = m[3] || ''; const vm = vms.get(vmid);
+    if (!vm) return send(res, null, 500, `Configuration file 'nodes/pve1/qemu-server/${vmid}.conf' does not exist`);
+    if (rest === '' && req.method === 'DELETE') { destroyed.push(`DELETE ${vmid} ${u.search}`); log('DESTROY', vmid, u.search);
+      if (vm.status !== 'stopped') return send(res, null, 500, 'VM is running'); return send(res, task('qmdestroy', vmid, 1000, () => vms.delete(vmid))); }
+    if (rest === '/clone' && req.method === 'POST') { const b = await body(req); log('CLONE', vmid, JSON.stringify(b));
+      const id = Number(b.newid); if (vms.has(id)) return send(res,null,500,`VM ${id} already exists`);
+      vms.set(id, { origin: vmid, vmid:id, node:'pve1', type:'qemu', name:b.name, status:'stopped', lock:'clone', maxcpu:vm.maxcpu, maxmem:vm.maxmem, maxdisk:vm.maxdisk, cfg:{...vm.cfg, scsi0: vm.cfg.scsi0.replace(`base-${vmid}`, `vm-${id}`), net0: vm.cfg.net0 ? vm.cfg.net0.replace(/=[0-9A-Fa-f:]{17}/, '').replace(/^(\w+)/, `$1=${newMac()}`) : `virtio=${newMac()},bridge=vmbr0`} });
+      if (vms.get(id).cfg.net0 && !/=/.test(vms.get(id).cfg.net0.split(',')[0])) vms.get(id).cfg.net0 = withMac(vms.get(id).cfg.net0);
+      return send(res, task('qmclone', vmid, 2500, () => { delete vms.get(id).lock; })); }
+    if (rest === '/config' && req.method === 'GET') return send(res, vm.cfg);
+    if (rest === '/config' && req.method === 'PUT') { const b = await body(req); if (b.net0) b.net0 = withMac(b.net0); log('CONFIG', vmid, JSON.stringify(b));
+      const hot = vm.status === 'running';
+      for (const k of ['cores', 'memory', 'sockets']) if (b[k] !== undefined && hot && String(vm.cfg[k] ?? '') !== String(b[k])) (vm.pending ??= {})[k] = b[k];
+      Object.assign(vm.cfg, b);
+      if (!hot) { if (b.cores) vm.maxcpu = Number(b.cores); if (b.memory) vm.maxmem = Number(b.memory)*2**20; }
+      return send(res, null); }
+    if (rest === '/pending' && req.method === 'GET') {
+      return send(res, Object.keys(vm.cfg).map((k) => ({ key: k, value: vm.pending?.[k] !== undefined ? undefined : vm.cfg[k], ...(vm.pending?.[k] !== undefined ? { value: String(k === 'cores' ? vm.maxcpu : Math.round(vm.maxmem / 2**20)), pending: vm.pending[k] } : {}) })));
+    }
+    if (rest === '/resize' && req.method === 'PUT') { const b = await body(req); log('RESIZE', vmid, JSON.stringify(b));
+      vm.cfg[b.disk] = vm.cfg[b.disk].replace(/size=[^,]+/, `size=${b.size}`); vm.maxdisk = parseInt(b.size)*2**30; return send(res, task('resize', vmid, 500)); }
+    const pw = rest.match(/^\/status\/(start|stop|shutdown|reboot)$/);
+    if (pw) { const a = pw[1]; log('POWER', vmid, a); return send(res, task(`qm${a}`, vmid, 800, () => {
+      vm.status = (a==='start'||a==='reboot')?'running':'stopped'; if (a==='start'||a==='reboot') started.set(vmid, Date.now());
+      if (vm.pending) { vm.maxcpu = Number(vm.cfg.cores); vm.maxmem = Number(vm.cfg.memory)*2**20; delete vm.pending; log('PENDING applied', vmid); } })); }
+    if (rest === '/status/current') return send(res, { status: vm.status, cpus: vm.maxcpu, uptime: 600, mem: vm.maxmem/4, maxmem: vm.maxmem, agent: 0 });
+    if (rest.startsWith('/firewall')) { const b = req.method==='GET'||req.method==='DELETE' ? Object.fromEntries(u.searchParams) : await body(req);
+      vm.fwRules ??= [];
+      if (rest === '/firewall/rules' && req.method === 'POST') vm.fwRules.splice(Number(b.pos ?? vm.fwRules.length), 0, b);
+      if (rest === '/firewall/rules' && req.method === 'GET') return send(res, vm.fwRules.map((r, i) => ({ ...r, pos: i })));
+      if (req.method !== 'GET') log('FW', vmid, req.method, rest, JSON.stringify(b)); return send(res, req.method==='GET' ? [] : null); }
+    if (rest === '/agent/ping') { if (vm.status==='running' && Date.now()-(started.get(vmid) ?? 0) > 2000) return send(res,{}); return send(res,null,500,'QEMU guest agent is not running'); }
+    if (rest === '/agent/set-user-password') { await body(req); log('AGENT set-user-password (reports OK, changes nothing)', vmid); return send(res,{}); }
+    if (rest === '/agent/exec') { const b = new URLSearchParams(await new Promise(r=>{let x='';req.on('data',c=>x+=c);req.on('end',()=>r(x));})); const cmd = b.getAll('command'); const stdin = b.get('input-data');
+      log('AGENT EXEC', vmid, JSON.stringify(cmd)); const pid = ++pidSeq; const script = cmd.join(' ');
+      const encIdx = cmd.indexOf('-EncodedCommand'); const decoded = encIdx >= 0 ? Buffer.from(cmd[encIdx+1], 'base64').toString('utf16le') : '';
+      if (decoded) log('AGENT SCRIPT', vmid, decoded.includes('Set-NetIPInterface') ? '[reset network to DHCP]' : decoded.includes('Get-NetIPAddress') ? '[list IPv4]' : decoded.slice(0,60));
+      if (cmd[0] === '/bin/bash' && vmid !== 150) {
+        const t = tailscaleExec(vm, vmid, cmd[2], stdin) ?? { out: '', code: 1, err: 'unknown command' };
+        const pid = ++pidSeq; execs.set(String(pid), { out: t.out, at: Date.now(), code: t.code, err: t.err, script: cmd[2] }); return send(res, { pid });
+      }
+      if (decoded && /Resize-Partition/.test(decoded)) {
+        const blocked = vm.recoveryAfterC; const pid = ++pidSeq;
+        execs.set(String(pid), { out: blocked ? 'blocked\n' : 'extended\n', at: Date.now(), code: 0, err: '' }); log('EXTEND C:', vmid, blocked ? 'blocked' : 'ok'); return send(res, { pid });
+      }
+      if (decoded && /tailscale/i.test(decoded)) {
+        const t = tailscaleExec(vm, vmid, decoded, stdin) ?? { out: '', code: 1, err: 'unknown command' };
+        const pid = ++pidSeq; execs.set(String(pid), { out: t.out, at: Date.now(), code: t.code, err: t.err, script: decoded }); return send(res, { pid });
+      }
+      if (cmd[0] === '/bin/bash') {
+        const sc = cmd[2]; let o = '', c = 0;
+        if (sc === 'wg show wg0 public-key') o = GW_PUB + '\n';
+        else if (/cat > (\S+)\.new/.test(sc)) { const f = /cat > (\S+)\.new/.exec(sc)[1]; gwFiles.set(f, stdin ?? ''); log('GW write', f, (stdin ?? '').length, 'bytes'); }
+        else if (sc.includes('wg syncconf')) { const peers = (gwFiles.get('/etc/wireguard/panel-peers.conf') ?? '').match(/\[Peer\]/g)?.length ?? 0; log('GW apply: peers =', peers); o = 'applied\n'; }
+        else if (sc === 'wg show wg0 latest-handshakes') { const keys = [...(gwFiles.get('/etc/wireguard/panel-peers.conf') ?? '').matchAll(/PublicKey = (\S+)/g)].map(m=>m[1]); o = keys.map((k,i)=> `${k}\t${i===0 ? Math.floor(Date.now()/1000)-30 : 0}`).join('\n') + '\n'; }
+        else { c = 1; }
+        const pid = ++pidSeq; execs.set(String(pid), { out: o, at: Date.now(), code: c, err: c ? 'unknown command' : '' }); return send(res, { pid });
+      }
+      vm.winpw ??= 'Template-Temp-Pass-2026!';
+      let code = 0, err = '';
+      let out = ''; if (decoded.includes('ValidateCredentials')) { out = stdin === vm.winpw ? 'valid\r\n' : 'invalid\r\n'; log('AGENT check password', vmid, '->', out.trim(), '(on command line:', JSON.stringify(cmd).includes(stdin ?? '#none#') ? 'YES!' : 'no', ')'); }
+      else if (decoded.includes('Set-LocalUser')) { if (vm.origin === 9102) { code = 1; err = 'Access is denied.\r\n'; } else { vm.winpw = stdin; out = 'set\r\n'; } log('AGENT Set-LocalUser', vmid, code ? 'FAILED' : 'ok'); }
+      else if (decoded.includes('Set-NetIPInterface')) { vm.dhcp = true; out = 'done\r\n'; }
+      else if (decoded.includes('Get-NetIPAddress')) { const n = /bridge=cu0*(\d+)/.exec(vm.cfg.net0 ?? '')?.[1]; out = vm.dhcp && n ? `10.100.${n}.150\r\n` : '192.168.1.50\r\n'; }
+      else if (script.includes('ImageState')) out = vm.origin === 9101 ? 'IMAGE_STATE_SPECIALIZE_RESEAL_TO_OOBE\r\n' : (Date.now()-(started.get(vmid) ?? 0) > 6000 ? 'IMAGE_STATE_COMPLETE\r\n' : 'IMAGE_STATE_SPECIALIZE_RESEAL_TO_OOBE\r\n');
+      else if (script.includes('COMPUTERNAME')) out = 'WIN-8K2J4H1\r\n';
+      execs.set(String(pid), { out, at: Date.now(), code: typeof code === 'number' ? code : 0, err: typeof err === 'string' ? err : '' }); return send(res, { pid }); }
+    if (rest === '/agent/exec-status') {
+      const pid = u.searchParams.get('pid'); const e = execs.get(String(pid));
+      if (!e) return send(res, null, 500, 'Agent error: PID lld does not exist');
+      // the process finished, but its one-and-only "exited" answer is lost in transit
+      const want = loseOnly.get(vmid);
+      if ((lose.get(vmid) ?? 0) > 0 && Date.now() - e.at > 500 && (!want || (e.script ?? '').includes(want))) { lose.set(vmid, lose.get(vmid) - 1); execs.delete(String(pid)); log('AGENT lost result of pid', pid, 'on', vmid);
+        return send(res, null, 500, `VM ${vmid} qga command 'guest-exec-status' failed - got timeout`); }
+    }
+    if (rest === '/agent/exec-status' && (flaky.get(vmid) ?? 0) > 0) { flaky.set(vmid, flaky.get(vmid) - 1); return send(res, null, 500, `VM ${vmid} qga command 'guest-exec-status' failed - got timeout`); }
+    if (rest === '/agent/exec-status') { const e = execs.get(String(u.searchParams.get('pid'))); return send(res, Date.now()-e.at > 500 ? { exited: 1, exitcode: e.code, 'out-data': e.out, 'err-data': e.err } : { exited: 0 }); }
+    if (rest === '/rrddata') return send(res, Array.from({length:5},(_,i)=>({time:i,cpu:0.1*i,mem:1e9,maxmem:4e9,netin:100,netout:50})));
+    if (rest === '/snapshot' && req.method === 'POST') { const b = await body(req); const v = vms.get(vmid);
+      return send(res, task('qmsnapshot', vmid, 800, () => { (v.snaps ??= []).push({ name: b.snapname, description: b.description ?? '', snaptime: Math.floor(Date.now() / 1000), vmstate: b.vmstate ? 1 : 0 }); })); }
+    if (rest === '/snapshot') return send(res, [...(vms.get(vmid)?.snaps ?? []), { name: 'current' }]);
+    if (rest === '/vncproxy') return send(res, {port:5900, ticket:'PVEVNC:abc'});
+    send(res, null, 501);
+  });
+  const wss = new WebSocketServer({ noServer: true });
+  srv.on('upgrade', (req, sock, head) => { wss.handleUpgrade(req, sock, head, (ws) => ws.send('RFB 003.008\n')); });
+
+
+  await new Promise((resolve) => srv.listen(port, '127.0.0.1', resolve));
+  const actualPort = srv.address().port;
+  return {
+    url: `http://127.0.0.1:${actualPort}`,
+    port: actualPort,
+    vms, sdn, gwFiles, destroyed,
+    /** GET a control endpoint, e.g. control('/__lose/104/1') */
+    control: (p) => fetch(`http://127.0.0.1:${actualPort}/api2/json${p}`, {
+      headers: { authorization: 'PVEAPIToken=panel@pve!panel=x' },
+    }).then((r) => r.json()).then((j) => j.data),
+    close: () => new Promise((resolve) => { wss.close(); srv.closeAllConnections?.(); srv.close(() => resolve()); }),
+  };
+}

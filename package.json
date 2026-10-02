@@ -19,7 +19,12 @@
     "user:create": "node --disable-warning=ExperimentalWarning scripts/create-user.js",
     "vm:assign": "node --disable-warning=ExperimentalWarning scripts/assign-vm.js",
     "user:reset-2fa": "node --disable-warning=ExperimentalWarning scripts/reset-2fa.js",
-    "db:backup": "node --disable-warning=ExperimentalWarning scripts/backup-db.js"
+    "db:backup": "node --disable-warning=ExperimentalWarning scripts/backup-db.js",
+    "test": "node --disable-warning=ExperimentalWarning --test --test-reporter=spec \"test/unit/**/*.test.mjs\" \"test/api/**/*.test.mjs\"",
+    "test:unit": "node --disable-warning=ExperimentalWarning --test --test-reporter=spec \"test/unit/**/*.test.mjs\"",
+    "test:api": "node --disable-warning=ExperimentalWarning --test --test-reporter=spec \"test/api/**/*.test.mjs\"",
+    "test:coverage": "node --disable-warning=ExperimentalWarning --test --experimental-test-coverage --test-coverage-include=\"src/**\" --test-reporter=spec --test-reporter-destination=stdout \"test/unit/**/*.test.mjs\" \"test/api/**/*.test.mjs\"",
+    "test:e2e": "playwright test"
   },
   "engines": {
     "node": ">=22.13"
@@ -40,5 +45,10 @@
     "qrcode": "^1.5.4",
     "undici": "^6.19.0",
     "ws": "^8.18.0"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.63.0",
+    "mailparser": "^3.9.33",
+    "smtp-server": "^3.19.16"
   }
 }

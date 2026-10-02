@@ -5,7 +5,7 @@
 #   pushes to main:                "edge" (development builds, e.g. 1.2.4-dev.abc1234)
 #   every build:                   "sha-<commit>"
 # So "latest" is always the newest RELEASE; development builds never replace it.
-# Pull requests only build.
+# Pull requests only build. Every build runs the tests first.
 
 name: Docker image
 
@@ -25,7 +25,17 @@ env:
   REGISTRY: ghcr.io
 
 jobs:
+  # The same tests as the Tests workflow; nothing is published unless they pass.
+  # (Pull requests are already tested by the Tests workflow itself.)
+  tests:
+    if: github.event_name != 'pull_request'
+    uses: ./.github/workflows/test.yml
+    permissions:
+      contents: read
+
   build:
+    needs: tests
+    if: ${{ !cancelled() && (needs.tests.result == 'success' || needs.tests.result == 'skipped') }}
     runs-on: ubuntu-latest
     permissions:
       contents: read
