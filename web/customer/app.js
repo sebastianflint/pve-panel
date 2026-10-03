@@ -199,7 +199,7 @@ function serverRow(vm) {
         <span class="os-tile os-${vm.os ?? 'other'}">${osIcon(vm.os, 22)}</span>
         <span class="row-main">
           <span class="row-name">${esc(vm.name)}</span>
-          <span class="row-facts">${esc(facts || (vm.type === 'lxc' ? 'Container' : 'Virtual machine'))}</span>
+          <span class="row-facts">${esc(facts || (vm.type === 'lxc' ? 'Container' : 'Virtual machine'))} ${expiryBadge(vm.expiry)}</span>
         </span>
         <span class="pill pill-${st}">${esc(statusWord(vm))}</span>
         <span class="row-load" ${ready ? '' : 'hidden'}>
@@ -332,12 +332,13 @@ function renderDetail() {
           <p class="state-line"><span class="pill pill-${st}">${statusText}</span><span class="muted">${esc(facts)}</span></p>
         </div>
         <div class="power" role="group" aria-label="Power">
-          <button class="btn primary" data-power="start" ${running || busy ? 'disabled' : ''}>${icon('play')}<span>Start</span></button>
+          <button class="btn primary" data-power="start" ${running || busy || vm.expiry?.expired ? 'disabled' : ''}>${icon('play')}<span>Start</span></button>
           <button class="btn" data-power="shutdown" ${!running || busy ? 'disabled' : ''}>${icon('power')}<span>Shut down</span></button>
           <button class="btn" data-power="reboot" ${!running || busy ? 'disabled' : ''}>${icon('restart')}<span>Restart</span></button>
           <button class="btn danger" data-power="stop" ${!running || busy ? 'disabled' : ''}>${icon('stop')}<span>Force stop</span></button>
         </div>
       </header>
+      ${expiryBanner(vm)}
 
       <div class="tabs" role="tablist">
         ${tabs.map(([id, label, ic]) => `
@@ -914,6 +915,54 @@ function onTemplateChange(form) {
   applyTemplateMode(form, tpl);
 }
 
+// ---------- expiry -----------------------------------------------------------
+const fmtDay = (iso) => new Date(iso).toLocaleDateString(undefined, { day: 'numeric', month: 'long', year: 'numeric' });
+const daysLeft = (iso) => Math.max(0, Math.ceil((Date.parse(iso) - Date.now()) / 86_400_000));
+
+/** Short badge for lists: "Expires in 5 days" / "Expired". */
+function expiryBadge(e) {
+  if (!e) return '';
+  if (e.expired) return '<span class="tag warn">Expired</span>';
+  const d = daysLeft(e.expiresAt);
+  return d <= 14 ? `<span class="tag ${d <= 3 ? 'warn' : ''}">Expires in ${d} day${d === 1 ? '' : 's'}</span>` : '';
+}
+
+/** Banner on the server page. */
+function expiryBanner(vm) {
+  const e = vm.expiry;
+  if (!e) return '';
+  const extend = e.canExtend
+    ? `<button class="btn" data-extend>${icon('clock')}<span>Extend by ${e.extendDays} days</span></button>` : '';
+  if (e.expired) {
+    return `
+      <div class="notice warn expiry-banner">
+        <p><strong>This server expired on ${esc(fmtDay(e.expiredAt))} and was stopped.</strong>
+          ${e.deleteAt ? `It will be deleted with all its data on <strong>${esc(fmtDay(e.deleteAt))}</strong>.` : 'Its data is kept until your provider decides.'}
+          ${e.canExtend ? '' : 'Contact your provider if you still need it.'}</p>
+        ${extend}
+      </div>`;
+  }
+  const d = daysLeft(e.expiresAt);
+  return `
+    <div class="notice ${d <= 7 ? 'warn' : ''} expiry-banner">
+      <p>${icon('clock', { size: 16 })} This server expires on <strong>${esc(fmtDay(e.expiresAt))}</strong>
+        (in ${d} day${d === 1 ? '' : 's'}). It is then stopped${e.canExtend ? '' : '; contact your provider to extend it'}.</p>
+      ${extend}
+    </div>`;
+}
+
+async function extendExpiry() {
+  const vm = state.detail;
+  if (!vm?.expiry) return;
+  if (!(await confirmAction(`Extend ${vm.name} by ${vm.expiry.extendDays} days? You can do this once; after that, contact your provider.`, 'Extend'))) return;
+  try {
+    const r = await api(`/api/vms/${vm.vmid}/extend`, { method: 'POST' });
+    toast(`${vm.name} now expires on ${fmtDay(r.expiresAt)}`);
+    await loadList();
+    select(vm.vmid);
+  } catch (err) { fail(err); }
+}
+
 // ---------- resize -----------------------------------------------------------
 async function openResize() {
   const vm = state.detail;
@@ -1409,6 +1458,7 @@ $('#detail').addEventListener('click', (e) => {
     input.value = generatePassword();
     input.type = 'text';
   }
+  if (t.hasAttribute('data-extend')) { extendExpiry(); return; }
   if (t.hasAttribute('data-reinstall')) openReinstall();
   if (t.hasAttribute('data-resize')) openResize();
   if (t.hasAttribute('data-back-to-server') && state.detail) select(state.detail.vmid);

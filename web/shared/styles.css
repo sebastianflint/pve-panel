@@ -660,6 +660,11 @@ dialog#twofa-admin { max-width: min(540px, calc(100vw - 32px)); }
 .panel-version { flex-basis: 100%; font: 400 11.5px var(--mono); color: var(--side-muted); opacity: 0.75; padding: 2px 6px 0; }
 .about-panel { margin-top: 16px; }
 .reinstall-notice { margin: 0 0 20px; }
+.expiry-banner { display: flex; gap: 14px; align-items: center; justify-content: space-between; flex-wrap: wrap; margin: 4px 0 16px; }
+.expiry-banner p { flex: 1; min-width: 260px; margin: 0; }
+.expiry-banner p .icon { display: inline-block; vertical-align: -3px; margin-right: 4px; }
+.tag.warn { color: color-mix(in srgb, var(--warn) 75%, var(--ink)); border-color: color-mix(in srgb, var(--warn) 45%, var(--line));
+  background: color-mix(in srgb, var(--warn) 10%, var(--surface)); }
 .size-pending { display: flex; gap: 14px; align-items: center; justify-content: space-between; flex-wrap: wrap; margin: 14px 0 0; }
 .size-pending p { flex: 1; min-width: 260px; }
 .size-row { margin-top: 12px; }

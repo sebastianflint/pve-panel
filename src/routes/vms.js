@@ -10,6 +10,7 @@ import { networkOf } from '../network.js';
 import { vpnInfoFor } from '../vpn.js';
 import { tailscaleStatus, connectTailscale, disconnectTailscale } from '../tailscale.js';
 import { versionInfo } from '../version.js';
+import { expiryInfo, expirySettings, customerExtend } from '../expiry.js';
 
 const ownedByUser = db.prepare('SELECT * FROM vms WHERE vmid = ? AND user_id = ?');
 const listForUser = db.prepare('SELECT * FROM vms WHERE user_id = ? ORDER BY vmid');
@@ -101,6 +102,7 @@ function summarize(row, guest) {
     progress: row.state === 'creating' ? row.progress : null,
     deletable: !!row.created_by_customer,
     reinstallable: !!row.created_by_customer,
+    expiry: expiryInfo(row, expirySettings()),
     name: row.label || guest?.name || (row.spec && JSON.parse(row.spec).hostname) || `Server ${row.vmid}`,
     hostname: guest?.name ?? null,
     status: guest?.status ?? 'unknown',
@@ -227,6 +229,14 @@ export default async function vmRoutes(app) {
     return reply.code(202).send({ started: true });
   });
 
+  // The customer's one self-service extension (if allowed for them)
+  app.post('/api/vms/:vmid/extend', { config: { rateLimit: { max: 5, timeWindow: '1 hour' } } }, async (req) => {
+    const vmid = Number(req.params.vmid);
+    const row = Number.isInteger(vmid) ? ownedByUser.get(vmid, req.account.id) : null;
+    if (!row) throw notFound();
+    return customerExtend(req, row);
+  });
+
   // Resize within the plan: cores, memory, disk (grow only)
   app.post('/api/vms/:vmid/resize', {
     config: { rateLimit: { max: 20, timeWindow: '1 hour' } },
@@ -338,10 +348,13 @@ export default async function vmRoutes(app) {
   app.post('/api/vms/:vmid/power/:action', {
     config: { rateLimit: { max: 20, timeWindow: '1 minute' } },
   }, async (req, reply) => {
-    const { guest, path } = await ownedGuest(req);
+    const { row, guest, path } = await ownedGuest(req);
     const { action } = req.params;
     if (!POWER_ACTIONS[guest.type].includes(action)) {
       return reply.code(400).send({ error: `Unsupported action "${action}"` });
+    }
+    if (row.expired_at && ['start', 'reboot'].includes(action)) {
+      return reply.code(403).send({ error: 'This server has expired. Extend it to use it again.' });
     }
     const upid = await pve.post(`${path}/status/${action}`);
     return recordTask(req, guest, upid, `power_${action}`);

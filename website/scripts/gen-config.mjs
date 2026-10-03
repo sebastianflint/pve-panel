@@ -21,6 +21,7 @@ const TOPICS = [
   ['Windows and guest agent', /^(WINDOWS_|AGENT_)/],
   ['Limits', /^MAX_/],
   ['Branding and versions', /^(PANEL_NAME|BRANDING_DIR|SHOW_VERSION_TO_CUSTOMERS|UPDATE_CHECK)/],
+  ['Server expiry', /^EXPIRY_/],
   ['Docker', /^(PANEL_IMAGE|PANEL_DOMAIN)/],
 ];
 const topicOf = (key) => TOPICS.find(([, re]) => re.test(key))?.[0] ?? 'Other';

@@ -5,6 +5,9 @@ import { startCustomerDeletion, deletionPlan, destroyServer, isProtected } from 
 import { tailscaleOverview } from '../tailscale.js';
 import * as totp from '../totp.js';
 import { deleteAllPasskeys } from '../passkeys.js';
+import {
+  expirySettings, saveExpirySettings, applyCustomerRule, setServerExpiry, extendServer, expiryInfo, runExpiry,
+} from '../expiry.js';
 import { versionInfo, updateStatus } from '../version.js';
 import {
   emailSettings, emailConfigured, saveEmailSettings, deleteEmailSettings, sendMail, testMessage,
@@ -35,6 +38,8 @@ export default async function adminRoutes(app) {
              u.totp_enabled AS totpEnabled, u.totp_required AS totpRequired,
              u.oidc_issuer AS ssoIssuer, u.oidc_subject IS NOT NULL AS ssoLinked,
              (SELECT COUNT(*) FROM passkeys p WHERE p.user_id = u.id) AS passkeyCount,
+             u.expiry_mode AS expiryMode, u.expiry_days AS expiryDays, u.expiry_date AS expiryDate,
+             u.expiry_self_extend AS expirySelfExtend,
              u.password_set, u.invite_token_hash, u.invite_expires, u.invited_at,
              COUNT(v.vmid) AS servers
       FROM users u LEFT JOIN vms v ON v.user_id = u.id
@@ -165,12 +170,16 @@ export default async function adminRoutes(app) {
           resetTotp: { type: 'boolean', const: true },
           unlinkSso: { type: 'boolean', const: true },
           removePasskeys: { type: 'boolean', const: true },
+          expiryMode: { type: ['string', 'null'], enum: ['after_creation', 'fixed_date', null] },
+          expiryDays: { type: 'integer', minimum: 1, maximum: 3650 },
+          expiryDate: { type: 'string', pattern: '^\\d{4}-\\d{2}-\\d{2}$' },
+          expirySelfExtend: { type: 'boolean' },
         },
       },
     },
   }, async (req, reply) => {
     const id = Number(req.params.id);
-    const user = db.prepare('SELECT id, email FROM users WHERE id = ?').get(id);
+    const user = db.prepare('SELECT * FROM users WHERE id = ?').get(id);
     if (!user) return reply.code(404).send({ error: 'User not found' });
 
     const { password, isAdmin } = req.body;
@@ -190,6 +199,20 @@ export default async function adminRoutes(app) {
     if (typeof req.body.totpRequired === 'boolean') {
       db.prepare('UPDATE users SET totp_required = ? WHERE id = ?').run(req.body.totpRequired ? 1 : 0, id);
       audit(req, null, req.body.totpRequired ? 'admin_twofa_require' : 'admin_twofa_unrequire', { email: user.email });
+    }
+    if ('expiryMode' in req.body || 'expirySelfExtend' in req.body) {
+      const mode = 'expiryMode' in req.body ? req.body.expiryMode : user.expiry_mode;
+      if (mode === 'after_creation' && !(req.body.expiryDays ?? user.expiry_days)) return badRequest(reply, 'Set the number of days');
+      if (mode === 'fixed_date' && !(req.body.expiryDate ?? user.expiry_date)) return badRequest(reply, 'Set the end date');
+      db.prepare(`UPDATE users SET expiry_mode = ?, expiry_days = ?, expiry_date = ?, expiry_self_extend = ? WHERE id = ?`).run(
+        mode ?? null,
+        mode === 'after_creation' ? (req.body.expiryDays ?? user.expiry_days) : null,
+        mode === 'fixed_date' ? (req.body.expiryDate ?? user.expiry_date) : null,
+        (req.body.expirySelfExtend ?? !!user.expiry_self_extend) ? 1 : 0,
+        id,
+      );
+      applyCustomerRule(id);
+      audit(req, null, 'admin_expiry_rule', { email: user.email, mode: mode ?? 'none', days: req.body.expiryDays, date: req.body.expiryDate });
     }
     if (req.body.removePasskeys) {
       const n = deleteAllPasskeys(id);   // lost device: the user signs in another way and adds new ones
@@ -246,10 +269,10 @@ export default async function adminRoutes(app) {
   // Every guest in the cluster, with its current owner (if any)
   app.get('/api/admin/vms', async () => {
     const owners = new Map(
-      db.prepare(`SELECT v.vmid, v.label, v.user_id, v.state, v.created_by_customer, u.email
-                  FROM vms v JOIN users u ON u.id = v.user_id`)
+      db.prepare(`SELECT v.*, u.email FROM vms v JOIN users u ON u.id = v.user_id`)
         .all().map((r) => [r.vmid, r])
     );
+    const expSettings = expirySettings();
     const guests = await clusterGuests(true);
     const list = [...guests.values()]
       .filter((g) => !g.template)
@@ -259,6 +282,7 @@ export default async function adminRoutes(app) {
           vmid: Number(g.vmid), name: g.name ?? '', node: g.node, type: g.type, status: g.status,
           userId: o?.user_id ?? null, owner: o?.email ?? null, label: o?.label ?? null,
           state: o?.state ?? null, createdByCustomer: !!o?.created_by_customer,
+          expiry: o ? expiryInfo(o, expSettings) : null, expiryManual: !!o?.expiry_manual,
         };
       });
     // Assignments whose guest no longer exists in the cluster (deleted in PVE)
@@ -266,7 +290,8 @@ export default async function adminRoutes(app) {
       if (!guests.has(vmid)) {
         list.push({ vmid, name: '', node: null, type: null, status: 'missing',
           userId: o.user_id, owner: o.email, label: o.label,
-          state: o.state, createdByCustomer: !!o.created_by_customer });
+          state: o.state, createdByCustomer: !!o.created_by_customer,
+          expiry: expiryInfo(o, expSettings), expiryManual: !!o.expiry_manual });
       }
     }
     return list.sort((a, b) => a.vmid - b.vmid);
@@ -293,8 +318,76 @@ export default async function adminRoutes(app) {
     `).run(vmid, user.id, guest.type, label);
     invalidateGuestCache();
     const renamedOnly = previous?.user_id === user.id;
+    if (!renamedOnly) {
+      db.prepare(`UPDATE vms SET expires_at = NULL, expiry_set_at = NULL, expiry_manual = 0, expired_at = NULL,
+                  expiry_notified = NULL, self_extended = 0 WHERE vmid = ?`).run(vmid);
+      applyCustomerRule(user.id);       // e.g. the customer's fixed end date
+    }
     audit(req, vmid, renamedOnly ? 'admin_vm_rename' : 'admin_vm_assign', { email: user.email, label });
     return { vmid, userId: user.id, owner: user.email, label, type: guest.type };
+  });
+
+  // ---- Expiry ------------------------------------------------------------------
+  // Set a date (ISO or YYYY-MM-DD), extend by days, or remove (expiresAt: null).
+  app.put('/api/admin/vms/:vmid/expiry', {
+    schema: {
+      body: {
+        type: 'object',
+        additionalProperties: false,
+        properties: {
+          expiresAt: { type: ['string', 'null'], maxLength: 40 },
+          extendDays: { type: 'integer', minimum: 1, maximum: 3650 },
+        },
+      },
+    },
+  }, async (req, reply) => {
+    const vmid = Number(req.params.vmid);
+    const row = db.prepare('SELECT * FROM vms WHERE vmid = ?').get(vmid);
+    if (!row) return reply.code(404).send({ error: 'Only servers assigned to a customer can expire' });
+    if (req.body.extendDays) {
+      const at = extendServer(vmid, req.body.extendDays);
+      audit(req, vmid, 'server_expiry_extended', { by: 'admin', days: req.body.extendDays, expiresAt: at });
+    } else if ('expiresAt' in req.body) {
+      const value = req.body.expiresAt
+        ? (/^\d{4}-\d{2}-\d{2}$/.test(req.body.expiresAt) ? new Date(`${req.body.expiresAt}T23:59:59`).toISOString() : req.body.expiresAt)
+        : null;
+      if (value && Date.parse(value) <= Date.now()) return badRequest(reply, 'Choose a date in the future');
+      setServerExpiry(vmid, value);
+      audit(req, vmid, value ? 'server_expiry_set' : 'server_expiry_removed', { expiresAt: value });
+    } else {
+      return badRequest(reply, 'Nothing to change');
+    }
+    const updated = db.prepare('SELECT * FROM vms WHERE vmid = ?').get(vmid);
+    return { vmid, expiry: expiryInfo(updated), expiryManual: !!updated.expiry_manual };
+  });
+
+  app.get('/api/admin/settings/expiry', async () => expirySettings());
+
+  app.put('/api/admin/settings/expiry', {
+    schema: {
+      body: {
+        type: 'object',
+        additionalProperties: false,
+        properties: {
+          reminderDays: { type: 'array', maxItems: 5, items: { type: 'integer', minimum: 1, maximum: 365 } },
+          graceDays: { type: 'integer', minimum: 0, maximum: 365 },
+          selfExtendDays: { type: 'integer', minimum: 1, maximum: 365 },
+          pauseDeletions: { type: 'boolean' },
+          adminSummary: { type: 'boolean' },
+        },
+      },
+    },
+  }, async (req) => {
+    const saved = saveExpirySettings(req.body);
+    audit(req, null, 'admin_expiry_settings', req.body);
+    return saved;
+  });
+
+  // Run the expiry check now (it also runs every few minutes by itself)
+  app.post('/api/admin/expiry/run', { config: { rateLimit: { max: 60, timeWindow: '1 minute' } } }, async (req) => {
+    const summary = await runExpiry({ log: req.log });
+    audit(req, null, 'admin_expiry_run', { stopped: summary.stopped?.length ?? 0, deleted: summary.deleted?.length ?? 0 });
+    return summary;
   });
 
   // ---- Acting on customer servers ------------------------------------------

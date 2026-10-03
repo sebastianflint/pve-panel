@@ -11,6 +11,7 @@ import { config } from './config.js';
 import { db } from './db.js';
 import { bootstrapAdmin } from './bootstrap.js';
 import { versionInfo, updateStatus } from './version.js';
+import { startExpiryScheduler } from './expiry.js';
 import authPlugin from './auth.js';
 import vmRoutes from './routes/vms.js';
 import consoleRoutes from './routes/console.js';
@@ -155,6 +156,7 @@ const admin = await buildServer('admin', async (app) => {
 
 admin.log.info(`pve-panel ${versionInfo.version}${versionInfo.commit ? ` (${versionInfo.commit.slice(0, 7)})` : ''}, Node ${process.version}`);
 bootstrapAdmin(admin.log);
+startExpiryScheduler(admin.log);
 
 await customer.listen({ port: config.port, host: config.host });
 await admin.listen({ port: config.adminPort, host: config.adminHost });

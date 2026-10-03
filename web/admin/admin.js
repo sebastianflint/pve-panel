@@ -45,6 +45,14 @@ const ACTION_LABELS = {
   admin_invite_sent: 'Sent invitation',
   server_resized: 'Changed server size',
   server_reinstall_started: 'Started reinstalling server',
+  server_expired: 'Server expired and was stopped',
+  server_expired_deleted: 'Expired server deleted',
+  server_expiry_extended: 'Extended server expiry',
+  server_expiry_set: 'Set server expiry',
+  server_expiry_removed: 'Removed server expiry',
+  admin_expiry_rule: 'Changed customer expiry rule',
+  admin_expiry_settings: 'Changed expiry settings',
+  admin_expiry_run: 'Ran expiry check',
   server_reinstalled: 'Reinstalled server',
   server_reinstall_failed: 'Reinstalling server failed',
   invite_accepted: 'Accepted invitation, password set',
@@ -101,7 +109,7 @@ export function createAdmin({ root, api, toast, fail, confirmAction, promptText,
         [st.users, st.email] = await Promise.all([api('/api/admin/users'), api('/api/admin/settings/email')]);
         if (!quiet) setTimeout(watchDeletions);
       } else if (st.tab === 'settings') {
-        st.email = await api('/api/admin/settings/email');
+        [st.email, st.expiry] = await Promise.all([api('/api/admin/settings/email'), api('/api/admin/settings/expiry')]);
       } else if (st.tab === 'about') {
         st.about = await api(`/api/admin/about${st.refreshAbout ? '?refresh=1' : ''}`);
         st.refreshAbout = false;
@@ -184,6 +192,7 @@ export function createAdmin({ root, api, toast, fail, confirmAction, promptText,
       ${b('shutdown', 'power', 'Shut down', idle && on && v.state === 'ready')}
       ${b('reboot', 'restart', 'Restart', idle && on && v.state === 'ready')}
       ${b('stop', 'stop', 'Force stop', idle && on && v.state === 'ready')}
+      ${b('expiry', 'clock', 'Expiry', true)}
       ${b('delete', 'trash', 'Delete server', idle, 'danger')}
     </span>`;
   }
@@ -215,6 +224,7 @@ export function createAdmin({ root, api, toast, fail, confirmAction, promptText,
   };
 
   async function serverAction(vm, action) {
+    if (action === 'expiry') { editServerExpiry(vm); return; }
     if (action === 'delete') {
       const answer = await promptText(`Type ${vm.vmid} to delete “${vm.name}” of ${vm.owner}`, {
         hint: 'The server is stopped if needed and deleted with its disks and snapshots. The customer loses it immediately.',
@@ -274,6 +284,7 @@ export function createAdmin({ root, api, toast, fail, confirmAction, promptText,
           ${v.state === 'deleting' ? '<span class="tag">being deleted</span>' : ''}
           ${v.state === 'failed' ? '<span class="tag warn">setup failed</span>' : ''}
           ${v.createdByCustomer ? '<span class="tag">created by customer</span>' : ''}
+          ${expiryTag(v)}
         </td>
         <td class="muted">${esc(v.node ?? '–')}</td>
         <td>
@@ -382,7 +393,7 @@ export function createAdmin({ root, api, toast, fail, confirmAction, promptText,
               const self = u.id === me.id;
               return `
               <tr data-user="${u.id}">
-                <td>${esc(u.email)}${self ? ' <span class="muted">(you)</span>' : ''}${u.ssoLinked ? ' <span class="tag" title="Linked to single sign-on">SSO</span>' : ''}${u.passkeyCount ? ` <span class="tag" title="${u.passkeyCount} passkey${u.passkeyCount > 1 ? 's' : ''}">Passkey</span>` : ''}${
+                <td>${esc(u.email)}${self ? ' <span class="muted">(you)</span>' : ''}${u.ssoLinked ? ' <span class="tag" title="Linked to single sign-on">SSO</span>' : ''}${u.passkeyCount ? ` <span class="tag" title="${u.passkeyCount} passkey${u.passkeyCount > 1 ? 's' : ''}">Passkey</span>` : ''}${u.expiryMode ? ` <span class="tag" title="${esc(expiryRuleText(u))}">${icon('clock', { size: 12 })} Expiry</span>` : ''}${
                   u.invite?.status === 'pending' ? ` <span class="tag" title="Link valid until ${esc(new Date(u.invite.expires).toLocaleString())}">Invitation pending</span>`
                   : u.invite?.status === 'expired' ? ' <span class="tag warn">Invitation expired</span>'
                   : u.invite?.status === 'sent' ? ' <span class="tag">Invited</span>' : ''}</td>
@@ -577,7 +588,18 @@ export function createAdmin({ root, api, toast, fail, confirmAction, promptText,
   function editLimits(user) {
     const dialog = document.getElementById('limits');
     const form = document.getElementById('limits-form');
-    document.getElementById('limits-title').textContent = `Limits for ${user.email}`;
+    document.getElementById('limits-title').textContent = `Limits and expiry for ${user.email}`;
+    form.expiryMode.value = user.expiryMode ?? '';
+    form.expiryDays.value = user.expiryDays ?? 14;
+    form.expiryDate.value = user.expiryDate ?? '';
+    form.expirySelfExtend.checked = !!user.expirySelfExtend;
+    const showRule = () => {
+      document.getElementById('lim-exp-days').hidden = form.expiryMode.value !== 'after_creation';
+      document.getElementById('lim-exp-date').hidden = form.expiryMode.value !== 'fixed_date';
+      document.getElementById('lim-exp-extend').hidden = !form.expiryMode.value;
+    };
+    form.expiryMode.onchange = showRule;
+    showRule();
     // Sensible starting values the first time self-service is switched on
     const fresh = !user.canCreate && !user.maxServers && !user.maxCores;
     form.canCreate.checked = user.canCreate;
@@ -604,9 +626,13 @@ export function createAdmin({ root, api, toast, fail, confirmAction, promptText,
               maxCores: Number(form.maxCores.value),
               maxMemoryMb: Math.round(Number(form.maxMemoryGb.value) * 1024),
               maxDiskGb: Number(form.maxDiskGb.value),
+              expiryMode: form.expiryMode.value || null,
+              ...(form.expiryMode.value === 'after_creation' ? { expiryDays: Number(form.expiryDays.value) } : {}),
+              ...(form.expiryMode.value === 'fixed_date' ? { expiryDate: form.expiryDate.value } : {}),
+              expirySelfExtend: form.expirySelfExtend.checked,
             },
           });
-          toast(`Limits saved for ${user.email}`);
+          toast(`Limits and expiry saved for ${user.email}`);
           resolve(true);
         } catch (err) {
           fail(err);
@@ -780,6 +806,55 @@ export function createAdmin({ root, api, toast, fail, confirmAction, promptText,
       ${tailscaleSection()}`;
   }
 
+  // ---- expiry ---------------------------------------------------------------
+  const day = (iso) => new Date(iso).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' });
+
+  function expiryTag(v) {
+    const e = v.expiry;
+    if (!e) return '';
+    if (e.expired) {
+      return e.deleteAt
+        ? `<span class="tag warn" title="Expired ${esc(day(e.expiredAt))}">Expired · deleted ${esc(day(e.deleteAt))}</span>`
+        : `<span class="tag warn" title="Assigned by you: not deleted automatically">Expired · your decision</span>`;
+    }
+    return `<span class="tag" title="${v.expiryManual ? 'Set for this server' : "From the customer's rule"}">Expires ${esc(day(e.expiresAt))}</span>`;
+  }
+
+  /** Set, extend or remove a server's expiry. */
+  async function editServerExpiry(vm) {
+    const dialog = document.getElementById('expiry-dialog');
+    const form = document.getElementById('expiry-form');
+    document.getElementById('ex-title').textContent = `Expiry of ${vm.label || vm.name} (${vm.vmid})`;
+    const e = vm.expiry;
+    document.getElementById('ex-state').textContent = !e ? 'This server does not expire.'
+      : e.expired ? `Expired on ${day(e.expiredAt)}${e.deleteAt ? `; deleted on ${day(e.deleteAt)} unless extended` : '; assigned by you, so it is not deleted automatically'}.`
+        : `Expires on ${day(e.expiresAt)}.`;
+    form.date.value = e && !e.expired ? e.expiresAt.slice(0, 10) : '';
+    form.date.min = new Date(Date.now() + 86_400_000).toISOString().slice(0, 10);
+    document.getElementById('ex-remove').hidden = !e;
+    form.date.onkeydown = (ev) => { if (ev.key === 'Enter') { ev.preventDefault(); dialog.close('ok'); } };
+    dialog.returnValue = '';
+    dialog.showModal();
+    const result = await new Promise((resolve) => dialog.addEventListener('close', () => resolve(dialog.returnValue), { once: true }));
+    let body = null;
+    if (result === 'ok') body = form.date.value ? { expiresAt: form.date.value } : null;
+    if (result === 'plus7') body = { extendDays: 7 };
+    if (result === 'plus30') body = { extendDays: 30 };
+    if (result === 'remove') body = { expiresAt: null };
+    if (!body) return;
+    try {
+      const r = await api(`/api/admin/vms/${vm.vmid}/expiry`, { method: 'PUT', body });
+      toast(r.expiry ? `${vm.label || vm.name} now expires on ${day(r.expiry.expiresAt)}` : `${vm.label || vm.name} no longer expires`);
+      load({ quiet: true });
+    } catch (err) { fail(err); }
+  }
+
+  function expiryRuleText(u) {
+    if (u.expiryMode === 'after_creation') return `Servers expire ${u.expiryDays} days after creation`;
+    if (u.expiryMode === 'fixed_date') return `Servers expire on ${day(`${u.expiryDate}T12:00:00`)}`;
+    return '';
+  }
+
   // ---- settings: email ----------------------------------------------------
   function renderSettings() {
     const e = st.email;
@@ -824,6 +899,40 @@ export function createAdmin({ root, api, toast, fail, confirmAction, promptText,
               <button class="btn primary">Save</button>
               ${e.configured ? '<button type="button" class="btn danger" data-email-remove>Remove email settings</button>' : ''}
               ${e.updatedAt ? `<span class="muted small">Last changed ${esc(new Date(`${e.updatedAt.replace(' ', 'T')}Z`).toLocaleString())}</span>` : ''}
+            </div>
+          </form>
+        </section>
+
+        <section class="security-card settings-card">
+          <div class="settings-head">
+            <h2 class="twofa-title">Server expiry</h2>
+            <p class="muted">For customers or servers you give an expiry date (customer: <em>Limits</em>; server: the
+              clock button in <em>Servers</em>). Reminders by email, stopped at expiry, deleted after the grace period —
+              only servers the customer created; servers you assigned are only stopped.</p>
+            ${e.configured ? '' : '<p class="small warn-text">Email is not set up: customers get no reminders, and nothing is deleted automatically (servers are only stopped).</p>'}
+          </div>
+          <form id="expiry-settings" class="email-form" novalidate>
+            <div class="grid-3">
+              <label>Reminders (days before)
+                <input name="reminderDays" value="${esc((st.expiry.reminderDays ?? []).join(', '))}" placeholder="7, 1" pattern="[0-9 ,]*">
+              </label>
+              <label>Grace period (days)
+                <input name="graceDays" type="number" min="0" max="365" value="${esc(st.expiry.graceDays)}" required>
+                <span class="hint">Stopped but kept, then deleted.</span>
+              </label>
+              <label>Self-extension (days)
+                <input name="selfExtendDays" type="number" min="1" max="365" value="${esc(st.expiry.selfExtendDays)}" required>
+                <span class="hint">For customers allowed to extend once.</span>
+              </label>
+            </div>
+            <label class="check"><input type="checkbox" name="pauseDeletions" ${st.expiry.pauseDeletions ? 'checked' : ''}>
+              <span>Pause deletions <span class="muted">Expired servers are only stopped, never deleted, until you switch this off.</span></span></label>
+            <label class="check"><input type="checkbox" name="adminSummary" ${st.expiry.adminSummary ? 'checked' : ''}>
+              <span>Daily summary to administrators <span class="muted">Only on days when something happened or expires soon.</span></span></label>
+            <div class="row">
+              <button class="btn primary">Save</button>
+              <button type="button" class="btn" data-expiry-run>Check now</button>
+              <span class="muted small" id="expiry-result"></span>
             </div>
           </form>
         </section>
@@ -882,6 +991,26 @@ export function createAdmin({ root, api, toast, fail, confirmAction, promptText,
         toast('Email settings saved');
         renderSettings();
       } catch (err) { fail(err); }
+    }
+    if (ev.target.id === 'expiry-settings') {
+      ev.preventDefault();
+      const f = ev.target;
+      if (!f.reportValidity()) return;
+      try {
+        st.expiry = await api('/api/admin/settings/expiry', {
+          method: 'PUT',
+          body: {
+            reminderDays: f.reminderDays.value.split(/[ ,]+/).filter(Boolean).map(Number),
+            graceDays: Number(f.graceDays.value),
+            selfExtendDays: Number(f.selfExtendDays.value),
+            pauseDeletions: f.pauseDeletions.checked,
+            adminSummary: f.adminSummary.checked,
+          },
+        });
+        toast('Expiry settings saved');
+        renderSettings();
+      } catch (err) { fail(err); }
+      return;
     }
     if (ev.target.id === 'email-test') {
       ev.preventDefault();
@@ -1046,6 +1175,19 @@ export function createAdmin({ root, api, toast, fail, confirmAction, promptText,
 
     if (t.hasAttribute('data-refresh-audit')) {
       load();
+      return;
+    }
+
+    if (t.hasAttribute('data-expiry-run')) {
+      t.disabled = true;
+      try {
+        const r = await api('/api/admin/expiry/run', { method: 'POST' });
+        const parts = [['stopped', r.stopped], ['deleted', r.deleted], ['reminded', r.reminded], ['waiting for your decision', r.awaitingAdmin],
+          ['deletion paused', r.paused], ['not deleted (no email)', r.blocked]].filter(([, l]) => l?.length).map(([k, l]) => `${l.length} ${k}`);
+        root.querySelector('#expiry-result').textContent = parts.length ? `Done: ${parts.join(', ')}.` : 'Done: nothing to do.';
+        if (r.errors?.length) toast(r.errors.join(' '), 'error');
+      } catch (err) { fail(err); }
+      t.disabled = false;
       return;
     }
 

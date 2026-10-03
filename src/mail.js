@@ -185,3 +185,82 @@ export function testMessage(to) {
     html: layout({ title: 'Email works', paragraphs: [esc(line)] }),
   };
 }
+
+// ---- Expiry -----------------------------------------------------------------------------
+
+const fmtDate = (iso) => new Date(iso).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' });
+const serverName = (s) => s.label || s.name || `server ${s.vmid}`;
+
+function expiryMail(title, lines, { button = true, footer } = {}) {
+  const panel = emailSettings().panelUrl;
+  return {
+    subject: title,
+    text: [...lines, '', `Panel: ${panel}`, ...(footer ? ['', footer] : [])].join('\n'),
+    html: layout({
+      title,
+      paragraphs: lines.map(esc),
+      button: button && panel ? { href: panel, label: `Open ${config.brand.name}` } : null,
+      footer: footer ? esc(footer) : null,
+    }),
+  };
+}
+
+/** Reminder before expiry. */
+export function expiryReminderMessage(server, { expiresAt, graceDays, canExtend }) {
+  const days = Math.max(1, Math.ceil((Date.parse(expiresAt) - Date.now()) / 86_400_000));
+  return expiryMail(`Your server ${serverName(server)} expires in ${days} day${days === 1 ? '' : 's'}`, [
+    `Your server “${serverName(server)}” expires on ${fmtDate(expiresAt)}.`,
+    `It will then be stopped. ${graceDays > 0 ? `After another ${graceDays} days it will be deleted with all its data, unless it is extended.` : 'It will then be deleted with all its data.'}`,
+    canExtend ? 'You can extend it once yourself on the server page in the panel.' : 'If you still need it, please contact your provider to extend it.',
+  ]);
+}
+
+/** The server expired and was stopped. */
+export function expiredMessage(server, { deleteAt, willDelete, canExtend }) {
+  return expiryMail(`Your server ${serverName(server)} has expired`, [
+    `Your server “${serverName(server)}” has expired and was stopped. Its data is still there.`,
+    willDelete
+      ? `It will be deleted with all its data on ${fmtDate(deleteAt)}, unless it is extended before then.`
+      : 'Your provider will decide what happens with it.',
+    canExtend ? 'You can extend it once yourself on the server page in the panel.' : 'If you still need it, please contact your provider.',
+  ]);
+}
+
+/** Last warning before deletion. */
+export function finalWarningMessage(server, { deleteAt, canExtend }) {
+  return expiryMail(`Last notice: ${serverName(server)} will be deleted tomorrow`, [
+    `Your expired server “${serverName(server)}” will be deleted with all its data on ${fmtDate(deleteAt)}.`,
+    'Deleted servers cannot be restored.',
+    canExtend ? 'You can still extend it once yourself on the server page.' : 'If you still need it, contact your provider today.',
+  ]);
+}
+
+/** The server was deleted after the grace period. */
+export function expiryDeletedMessage(server) {
+  return expiryMail(`Your server ${serverName(server)} was deleted`, [
+    `Your server “${serverName(server)}” expired and has now been deleted after the grace period.`,
+  ], { button: false });
+}
+
+/** Daily summary for administrators. */
+export function expirySummaryMessage(summary) {
+  const line = (title, list) => (list.length ? [`${title}:`, ...list.map((x) => `• ${x}`), ''] : []);
+  const lines = [
+    ...line('Stopped (expired)', summary.stopped),
+    ...line('Deleted', summary.deleted),
+    ...line('Expired servers you assigned (not deleted automatically, your decision)', summary.awaitingAdmin),
+    ...line('Deletion paused (setting)', summary.paused),
+    ...line('Not deleted: the customer could not be warned (email not configured)', summary.blocked),
+    ...line('Expiring in the next 7 days', summary.upcoming),
+  ];
+  const text = lines.join('\n').trim();
+  return {
+    subject: `${config.brand.name}: server expiry summary`,
+    text: `${text}\n\nManage expiry in the admin interface (Servers and Customers).`,
+    html: layout({
+      title: 'Server expiry summary',
+      paragraphs: lines.filter(Boolean).map((l) => (l.endsWith(':') ? `<strong>${esc(l)}</strong>` : esc(l))),
+      footer: 'Manage expiry in the admin interface (Servers and Customers).',
+    }),
+  };
+}
