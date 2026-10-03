@@ -181,6 +181,19 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS passkeys_user ON passkeys(user_id);
 `);
 
+// Expiry (opt-in per customer): servers are reminded, stopped at expiry, kept for
+// a grace period, then deleted (customer-created servers only).
+addColumn('users', 'expiry_mode', 'TEXT');                 // NULL | after_creation | fixed_date
+addColumn('users', 'expiry_days', 'INTEGER');              // for after_creation
+addColumn('users', 'expiry_date', 'TEXT');                 // YYYY-MM-DD, for fixed_date
+addColumn('users', 'expiry_self_extend', 'INTEGER NOT NULL DEFAULT 0');
+addColumn('vms', 'expires_at', 'TEXT');                    // ISO time, NULL = never
+addColumn('vms', 'expiry_set_at', 'TEXT');                 // when the date was set (for reminders)
+addColumn('vms', 'expiry_manual', 'INTEGER NOT NULL DEFAULT 0'); // set by hand, not by the customer rule
+addColumn('vms', 'expired_at', 'TEXT');                    // stopped by expiry; grace period runs from here
+addColumn('vms', 'expiry_notified', 'TEXT');               // JSON: emails already sent
+addColumn('vms', 'self_extended', 'INTEGER NOT NULL DEFAULT 0');
+
 // Background jobs don't survive a restart; don't leave servers stuck forever.
 db.exec(`
   UPDATE vms SET state = 'failed', error = 'Setup was interrupted because the panel restarted'

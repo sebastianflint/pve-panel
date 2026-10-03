@@ -7,6 +7,7 @@ import {
 import { ensureNetwork, isolateGuest, nicModel } from './network.js';
 import { setupWindows, windowsPasswordProblem } from './windows.js';
 import { agentExec } from './agent.js';
+import { expiryForNewServer } from './expiry.js';
 
 const MB = 1024 ** 2;
 const GB = 1024 ** 3;
@@ -196,12 +197,12 @@ export async function createServer(req, spec) {
     });
 
     db.prepare(`
-      INSERT INTO vms (vmid, user_id, type, label, state, created_by_customer, spec, progress)
-      VALUES (?, ?, 'qemu', NULL, 'creating', 1, ?, 'Copying the image')
+      INSERT INTO vms (vmid, user_id, type, label, state, created_by_customer, spec, progress, expires_at, expiry_set_at)
+      VALUES (?, ?, 'qemu', NULL, 'creating', 1, ?, 'Copying the image', ?, ?)
     `).run(vmid, account.id, JSON.stringify({
       cores: spec.cores, memoryMb: spec.memoryMb, diskGb: spec.diskGb, template: tpl.vmid,
       hostname: spec.hostname,
-    }));
+    }), expiryForNewServer(account.id), new Date().toISOString());
     audit(req, vmid, 'server_create_started', { template: tpl.vmid, hostname: spec.hostname });
 
     background = true;
@@ -294,6 +295,7 @@ export async function reinstallServer(req, row, input) {
     throw new ProvisionError(403, 'Only servers you created yourself can be reinstalled');
   }
   if (!account.can_create) throw new ProvisionError(403, 'Reinstalling is not enabled for your account');
+  if (row.expired_at) throw new ProvisionError(403, 'This server has expired. Extend it first.');
   if (!['ready', 'failed'].includes(row.state)) {
     throw new ProvisionError(409, 'Wait until the current operation on this server has finished');
   }
@@ -403,6 +405,7 @@ export async function resizeServer(req, row, { cores, memoryMb, diskGb, restart 
   const account = req.account;
   if (!row.created_by_customer) throw new ProvisionError(403, 'Only servers you created yourself can be resized');
   if (!account.can_create) throw new ProvisionError(403, 'Resizing is not enabled for your account');
+  if (row.expired_at) throw new ProvisionError(403, 'This server has expired. Extend it first.');
   if (row.state !== 'ready') throw new ProvisionError(409, 'Wait until the current operation on this server has finished');
   if (resizing.has(row.vmid)) throw new ProvisionError(409, 'This server is already being resized');
   resizing.add(row.vmid);

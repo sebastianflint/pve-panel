@@ -81,9 +81,43 @@
         <label>Disk (GB) <input name="maxDiskGb" type="number" min="0" required></label>
       </div>
       <p id="limits-usage" class="muted small"></p>
+      <h3 class="small-head">Expiry</h3>
+      <div class="grid-2">
+        <label>Servers expire
+          <select name="expiryMode">
+            <option value="">Never</option>
+            <option value="after_creation">After a number of days</option>
+            <option value="fixed_date">On a date</option>
+          </select>
+        </label>
+        <label id="lim-exp-days">Days after creation <input name="expiryDays" type="number" min="1" max="3650"></label>
+        <label id="lim-exp-date">End date <input name="expiryDate" type="date"></label>
+      </div>
+      <label class="check" id="lim-exp-extend">
+        <input type="checkbox" name="expirySelfExtend">
+        <span>Customer may extend each server once
+          <span class="muted">By the number of days set under Settings, Server expiry.</span>
+        </span>
+      </label>
       <div class="row end">
         <button value="cancel" class="btn ghost" formnovalidate>Cancel</button>
-        <button value="ok" class="btn primary">Save limits</button>
+        <button value="ok" class="btn primary">Save</button>
+      </div>
+    </form>
+  </dialog>
+  <dialog id="expiry-dialog">
+    <form method="dialog" id="expiry-form" class="limits-form">
+      <h2 id="ex-title" class="h2"></h2>
+      <p id="ex-state" class="muted"></p>
+      <label>Expires on <input name="date" type="date"></label>
+      <div class="row">
+        <button value="plus7" class="btn" formnovalidate>+7 days</button>
+        <button value="plus30" class="btn" formnovalidate>+30 days</button>
+        <button value="remove" class="btn danger" id="ex-remove" formnovalidate>No expiry</button>
+      </div>
+      <div class="row end">
+        <button value="cancel" class="btn ghost" formnovalidate>Cancel</button>
+        <button value="ok" class="btn primary">Save date</button>
       </div>
     </form>
   </dialog>

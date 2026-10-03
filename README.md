@@ -134,6 +134,7 @@ PVE Panel was built with substantial help from an AI assistant (**Claude by Anth
 - Delete customers together with their owned infrastructure
 - See the running version and whether an update is available
 - Configure email (SMTP) in the admin portal and invite users by email
+- Give single customers or servers an expiry date: reminders, automatic stop, grace period, deletion
 
 ### Provisioning
 
@@ -727,6 +728,24 @@ The customer list shows *Invitation pending* or *Invitation expired* until the u
 
 ---
 
+## ⏳ Server expiry
+
+Opt-in end dates for **single customers or servers** — trials, test servers, courses:
+
+```text
+Reminders (7 / 1 days) ──► Expired: stopped ──► Grace period (14 days) ──► Deleted
+                                    └─ one-click extension (admin, or customer once) ─┘
+```
+
+- per customer: *N days after creation* or *on a fixed date*; per server: set, extend or remove a date
+- only **customer-created** servers are deleted automatically — servers you assigned are only stopped
+- nothing is deleted without an email warning; deletions can be paused globally
+- reminders, notices and a daily admin summary by email
+
+Details: [Server expiry](https://sebastianflint.github.io/pve-panel/docs/administration/expiry).
+
+---
+
 ## 🪟 Windows templates
 
 Windows systems can be deployed without cloud-init.
@@ -1071,6 +1090,7 @@ Only these file names are served, with a strict sandbox policy. Make sure you're
 │   ├── tailscale.js
 │   ├── totp.js
 │   ├── passkeys.js
+│   ├── expiry.js
 │   ├── oidc.js
 │   ├── vpn.js
 │   ├── agent.js
@@ -1140,6 +1160,7 @@ Only these file names are served, with a strict sandbox policy. Make sure you're
 | `POST` | `/api/vms` | Provision a server |
 | `POST` | `/api/vms/:vmid/reinstall` | Reinstall a self-created server from a template |
 | `POST` | `/api/vms/:vmid/resize` | Change CPU cores, memory and disk within the plan |
+| `POST` | `/api/vms/:vmid/extend` | Extend an expiring server (once, if allowed) |
 | `DELETE` | `/api/vms/:vmid` | Delete a self-created server |
 | `GET` | `/api/vpn` | VPN state |
 | `POST` | `/api/vpn/devices` | Add VPN device |
@@ -1243,6 +1264,7 @@ Every change is tested on GitHub; releases are only published when all tests pas
 |---|---|
 | Unit | 2FA (RFC 6238 vectors), secret encryption, SSO account rules, guest agent handling |
 | Passkeys | registration and sign-in with a software authenticator; phishing origin, missing user verification, forged signature, replayed counter |
+| Expiry | rules, reminders, stop, self-extension, grace period, deletion, and the safety rules |
 | API | the real panel against a simulated Proxmox: sign-in & 2FA, ownership, provisioning, networks, plan limits, reinstall, resize, email & invitations, VPN, Tailscale, customer deletion |
 | Browser | Playwright: sign-in, overview, server page, creating a server, admin views |
 
