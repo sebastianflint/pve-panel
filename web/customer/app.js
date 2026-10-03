@@ -6,6 +6,7 @@ import { icon, osIcon, brandMark, applyBrand } from '/shared/icons.js';
 import { netMap } from '/netmap.js';
 import { signInSecondStep, renderSecurity } from '/shared/twofa.js';
 import { prepareSignIn, resumeSso } from '/shared/signin.js';
+import { renderPasskeys } from '/shared/passkeys.js';
 
 const brandReady = applyBrand();
 document.querySelectorAll('[data-brand-mark]').forEach((el) => { el.innerHTML = brandMark(30); });
@@ -44,7 +45,9 @@ function resetLogin() {
   $('#login-form [name=email]').focus();
 }
 
-const signInReady = prepareSignIn($('#login-form'));
+const signInReady = prepareSignIn($('#login-form'), {
+  onSignedIn: (me) => { resetLogin(); startApp(me); },
+});
 
 async function showLogin() {
   clearInterval(state.poll);
@@ -1461,6 +1464,7 @@ function openAccount() {
         </div>
       </header>
       <div id="security"></div>
+      <div id="passkeys" class="account-section"></div>
       ${state.account.panelVersion ? `
         <section class="security-card about-panel">
           <div>
@@ -1470,6 +1474,7 @@ function openAccount() {
         </section>` : ''}
     </div>`;
   renderSecurity($('#security'), { email: state.me.email });
+  renderPasskeys($('#passkeys'));
 }
 $('#nav-account').addEventListener('click', openAccount);
 

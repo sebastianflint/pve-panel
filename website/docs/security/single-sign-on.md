@@ -1,6 +1,6 @@
 ---
 title: Single sign-on (OIDC)
-sidebar_position: 3
+sidebar_position: 4
 ---
 
 Users can sign in with your identity provider (Microsoft Entra ID, Keycloak,

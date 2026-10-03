@@ -4,6 +4,7 @@ import { pve, clusterGuests, locateGuest, locateTemplate, invalidateGuestCache, 
 import { startCustomerDeletion, deletionPlan, destroyServer, isProtected } from '../cleanup.js';
 import { tailscaleOverview } from '../tailscale.js';
 import * as totp from '../totp.js';
+import { deleteAllPasskeys } from '../passkeys.js';
 import { versionInfo, updateStatus } from '../version.js';
 import {
   emailSettings, emailConfigured, saveEmailSettings, deleteEmailSettings, sendMail, testMessage,
@@ -33,6 +34,7 @@ export default async function adminRoutes(app) {
              u.deleting, u.deletion_error AS deletionError,
              u.totp_enabled AS totpEnabled, u.totp_required AS totpRequired,
              u.oidc_issuer AS ssoIssuer, u.oidc_subject IS NOT NULL AS ssoLinked,
+             (SELECT COUNT(*) FROM passkeys p WHERE p.user_id = u.id) AS passkeyCount,
              u.password_set, u.invite_token_hash, u.invite_expires, u.invited_at,
              COUNT(v.vmid) AS servers
       FROM users u LEFT JOIN vms v ON v.user_id = u.id
@@ -162,6 +164,7 @@ export default async function adminRoutes(app) {
           totpRequired: { type: 'boolean' },
           resetTotp: { type: 'boolean', const: true },
           unlinkSso: { type: 'boolean', const: true },
+          removePasskeys: { type: 'boolean', const: true },
         },
       },
     },
@@ -187,6 +190,10 @@ export default async function adminRoutes(app) {
     if (typeof req.body.totpRequired === 'boolean') {
       db.prepare('UPDATE users SET totp_required = ? WHERE id = ?').run(req.body.totpRequired ? 1 : 0, id);
       audit(req, null, req.body.totpRequired ? 'admin_twofa_require' : 'admin_twofa_unrequire', { email: user.email });
+    }
+    if (req.body.removePasskeys) {
+      const n = deleteAllPasskeys(id);   // lost device: the user signs in another way and adds new ones
+      audit(req, null, 'admin_passkeys_removed', { email: user.email, count: n });
     }
     if (req.body.unlinkSso) {
       // The next single sign-on links again by verified email (or is refused).

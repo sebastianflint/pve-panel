@@ -117,7 +117,7 @@ PVE Panel was built with substantial help from an AI assistant (**Claude by Anth
 - View provisioning progress and actionable failure messages
 - Manage personal VPN devices
 - Connect servers to a personal Tailscale network
-- Manage their own two-factor authentication
+- Manage their own two-factor authentication and passkeys
 - See which panel version they're using
 
 ### Administrator experience
@@ -631,6 +631,17 @@ Features include:
 
 Locked out yourself? `npm run user:reset-2fa -- admin@example.com`
 
+### Passkeys
+
+Sign in with **fingerprint, face, device PIN or a security key** — no email, password or code. Phishing-resistant (WebAuthn/FIDO2).
+
+- add, rename and remove passkeys under **Account**; synced passkeys and security keys work
+- a passkey sign-in counts as two-factor (it satisfies required 2FA)
+- needs a domain name over https (or `localhost`), not a bare IP address
+- administrators can remove a user's passkeys (lost device)
+
+Details: [Passkeys](https://sebastianflint.github.io/pve-panel/docs/security/passkeys).
+
 ### OpenID Connect / SSO
 
 PVE Panel supports OpenID Connect for both the customer and administrator portals.
@@ -869,6 +880,7 @@ Key controls include:
 - User-bound task tracking
 - Audit logging
 - Optional TOTP 2FA
+- Passkeys (WebAuthn) with required user verification
 - OIDC with PKCE and token validation
 - Customer-specific SDN isolation
 - VM firewall enforcement (incoming and outgoing)
@@ -1058,6 +1070,7 @@ Only these file names are served, with a strict sandbox policy. Make sure you're
 │   ├── cleanup.js
 │   ├── tailscale.js
 │   ├── totp.js
+│   ├── passkeys.js
 │   ├── oidc.js
 │   ├── vpn.js
 │   ├── agent.js
@@ -1133,6 +1146,8 @@ Only these file names are served, with a strict sandbox policy. Make sure you're
 | `DELETE` | `/api/vpn/devices/:id` | Remove VPN device |
 | `GET/POST/DELETE` | `/api/vms/:vmid/tailscale` | Manage Tailscale |
 | `GET/POST` | `/api/account/2fa/...` | Manage 2FA |
+| `GET/POST/PATCH/DELETE` | `/api/account/passkeys/...` | Manage passkeys |
+| `POST` | `/api/auth/passkey/options`, `/api/auth/passkey/verify` | Sign in with a passkey |
 | `POST` | `/api/invite/check`, `/api/invite/accept` | Invitation link: check it, set the password |
 
 The administrator API is available only through the administrator server and an authenticated admin session. `GET /healthz` reports liveness for Docker and monitoring.
@@ -1227,6 +1242,7 @@ Every change is tested on GitHub; releases are only published when all tests pas
 | Layer | Covers |
 |---|---|
 | Unit | 2FA (RFC 6238 vectors), secret encryption, SSO account rules, guest agent handling |
+| Passkeys | registration and sign-in with a software authenticator; phishing origin, missing user verification, forged signature, replayed counter |
 | API | the real panel against a simulated Proxmox: sign-in & 2FA, ownership, provisioning, networks, plan limits, reinstall, resize, email & invitations, VPN, Tailscale, customer deletion |
 | Browser | Playwright: sign-in, overview, server page, creating a server, admin views |
 

@@ -161,6 +161,26 @@ addColumn('users', 'invite_token_hash', 'TEXT');
 addColumn('users', 'invite_expires', 'TEXT');
 addColumn('users', 'invited_at', 'TEXT');
 
+// Passkeys (WebAuthn). The public key is stored, never a secret. The user handle
+// stored in passkeys is a random value per account, not the email address.
+addColumn('users', 'webauthn_user_id', 'TEXT');
+db.exec(`
+  CREATE TABLE IF NOT EXISTS passkeys (
+    id           TEXT PRIMARY KEY,                 -- credential ID (base64url)
+    user_id      INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    rp_id        TEXT NOT NULL,                    -- domain it belongs to
+    public_key   TEXT NOT NULL,                    -- COSE public key (base64url)
+    counter      INTEGER NOT NULL DEFAULT 0,
+    transports   TEXT,                             -- JSON array
+    device_type  TEXT,                             -- singleDevice | multiDevice (synced)
+    backed_up    INTEGER NOT NULL DEFAULT 0,
+    name         TEXT NOT NULL,
+    created_at   TEXT NOT NULL DEFAULT (datetime('now')),
+    last_used_at TEXT
+  );
+  CREATE INDEX IF NOT EXISTS passkeys_user ON passkeys(user_id);
+`);
+
 // Background jobs don't survive a restart; don't leave servers stuck forever.
 db.exec(`
   UPDATE vms SET state = 'failed', error = 'Setup was interrupted because the panel restarted'

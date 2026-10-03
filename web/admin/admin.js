@@ -1,5 +1,6 @@
 import { icon } from '/shared/icons.js';
 import { renderSecurity } from '/shared/twofa.js';
+import { renderPasskeys } from '/shared/passkeys.js';
 
 // Administration area: assign servers, manage customers, read the activity log.
 // Receives the shared helpers from app.js so it behaves like the rest of the panel.
@@ -56,6 +57,9 @@ const ACTION_LABELS = {
   admin_twofa_require: 'Required two-factor authentication',
   admin_twofa_unrequire: 'Made two-factor authentication optional',
   admin_twofa_reset: 'Reset two-factor authentication',
+  passkey_added: 'Added a passkey',
+  passkey_removed: 'Removed a passkey',
+  admin_passkeys_removed: 'Removed passkeys of a user',
   cli_twofa_reset: 'Reset two-factor authentication (command line)',
   sso_login_failed: 'Failed single sign-on',
   admin_sso_login_failed: 'Failed single sign-on (administration)',
@@ -138,7 +142,12 @@ export function createAdmin({ root, api, toast, fail, confirmAction, promptText,
     if (st.tab === 'templates') renderTemplates();
     if (st.tab === 'vpn') renderVpn();
     if (st.tab === 'activity') renderActivity();
-    if (st.tab === 'account') renderSecurity(root.querySelector('#admin-body'), { email: getMe().email });
+    if (st.tab === 'account') {
+      const body = root.querySelector('#admin-body');
+      body.innerHTML = '<div id="admin-2fa"></div><div id="admin-passkeys" class="account-section"></div>';
+      renderSecurity(body.querySelector('#admin-2fa'), { email: getMe().email });
+      renderPasskeys(body.querySelector('#admin-passkeys'));
+    }
     if (st.tab === 'about') renderAbout();
     if (st.tab === 'settings') renderSettings();
   }
@@ -373,7 +382,7 @@ export function createAdmin({ root, api, toast, fail, confirmAction, promptText,
               const self = u.id === me.id;
               return `
               <tr data-user="${u.id}">
-                <td>${esc(u.email)}${self ? ' <span class="muted">(you)</span>' : ''}${u.ssoLinked ? ' <span class="tag" title="Linked to single sign-on">SSO</span>' : ''}${
+                <td>${esc(u.email)}${self ? ' <span class="muted">(you)</span>' : ''}${u.ssoLinked ? ' <span class="tag" title="Linked to single sign-on">SSO</span>' : ''}${u.passkeyCount ? ` <span class="tag" title="${u.passkeyCount} passkey${u.passkeyCount > 1 ? 's' : ''}">Passkey</span>` : ''}${
                   u.invite?.status === 'pending' ? ` <span class="tag" title="Link valid until ${esc(new Date(u.invite.expires).toLocaleString())}">Invitation pending</span>`
                   : u.invite?.status === 'expired' ? ' <span class="tag warn">Invitation expired</span>'
                   : u.invite?.status === 'sent' ? ' <span class="tag">Invited</span>' : ''}</td>
@@ -499,6 +508,17 @@ export function createAdmin({ root, api, toast, fail, confirmAction, promptText,
         : '<span class="pill">Off</span> The user signs in with password only.';
     form.required.checked = user.totpRequired;
     document.getElementById('ta-reset-box').hidden = !user.totpEnabled;
+    const pkBox = document.getElementById('ta-passkey-box');
+    pkBox.hidden = !user.passkeyCount;
+    document.getElementById('ta-passkey-count').textContent = `${user.passkeyCount} passkey${user.passkeyCount === 1 ? '' : 's'}`;
+    document.getElementById('ta-remove-passkeys').onclick = async () => {
+      if (!(await confirmAction(`Remove all passkeys of ${user.email}? They then sign in with password or single sign-on and can add new passkeys.`, 'Remove'))) return;
+      try {
+        await api(`/api/admin/users/${user.id}`, { method: 'PATCH', body: { removePasskeys: true } });
+        toast(`Passkeys removed for ${user.email}`);
+        dialog.close('reset');
+      } catch (err) { fail(err); }
+    };
     const ssoBox = document.getElementById('ta-sso-box');
     ssoBox.hidden = !user.ssoLinked;
     document.getElementById('ta-sso-issuer').textContent = user.ssoIssuer ?? '';
@@ -953,6 +973,7 @@ export function createAdmin({ root, api, toast, fail, confirmAction, promptText,
                 if (d?.label && a.action.startsWith('admin_template')) detail = d.label;
                 if (d?.error) detail = d.error;
                 if (d?.reason && a.action.includes('sso')) detail = d.reason;
+                if (d?.passkey) detail = d.reason ? `passkey: ${d.reason}` : 'with a passkey';
               } catch { /* ignore */ }
               return `
               <tr class="${a.action.endsWith('login_failed') || a.action.endsWith('_failed') ? 'row-warn' : ''}">
