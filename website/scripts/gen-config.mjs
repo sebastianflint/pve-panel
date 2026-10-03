@@ -14,7 +14,7 @@ const lines = fs.readFileSync(envFile, 'utf8').split(/\r?\n/);
 const TOPICS = [
   ['Proxmox connection', /^PVE_/],
   ['Panel, ports and security', /^(PORT|HOST|ADMIN_PORT|ADMIN_HOST|JWT_SECRET|COOKIE_SECURE|DB_PATH|PANEL_PUBLIC_URL|ADMIN_PUBLIC_URL|INITIAL_ADMIN_)/],
-  ['Sign-in: passwords and single sign-on', /^(PASSWORD_LOGIN_|OIDC_)/],
+  ['Sign-in: passwords, passkeys and single sign-on', /^(PASSWORD_LOGIN_|OIDC_|PASSKEYS_)/],
   ['Customer networks', /^(CUSTOMER_|SDN_)/],
   ['WireGuard VPN', /^VPN_/],
   ['Tailscale', /^TAILSCALE_/],

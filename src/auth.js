@@ -6,6 +6,7 @@ import { db, audit } from './db.js';
 import * as totp from './totp.js';
 import * as oidc from './oidc.js';
 import { checkInvitation, acceptInvitation } from './invite.js';
+import * as passkeys from './passkeys.js';
 
 const SESSION_HOURS = 8;
 // Compared against when the email is unknown, so response time
@@ -64,7 +65,7 @@ async function authPlugin(app, { scope }) {
   async function startSession(req, reply, user, how) {
     const token = await reply.jwtSign({ sub: user.id, scope });
     req.account = user;
-    audit(req, null, adminOnly ? 'admin_login' : 'login', how ? { twoFactor: how } : null);
+    audit(req, null, adminOnly ? 'admin_login' : 'login', how === 'passkey' ? { passkey: true } : how ? { twoFactor: how } : null);
     return reply
       .clearCookie(pendingCookie, { path: '/' })
       .setCookie(cookieName, token, cookieOpts(SESSION_HOURS * 3600))
@@ -183,8 +184,9 @@ async function authPlugin(app, { scope }) {
   // ---- Sign-in options + OIDC ---------------------------------------------------
   const ssoHere = oidc.oidcEnabledFor(scope);
 
-  app.get('/api/auth/options', async () => ({
+  app.get('/api/auth/options', async (req) => ({
     password: config.auth.password[scope],
+    passkeys: passkeys.relyingParty(scope, req).usable,
     oidc: ssoHere
       ? { enabled: true, label: config.oidc.label, startUrl: `${config.oidc.publicUrl[scope]}/api/auth/oidc/start` }
       : { enabled: false },
@@ -299,6 +301,92 @@ async function authPlugin(app, { scope }) {
       return continueTo(reply, '/');
     });
   }
+
+  // ---- Passkeys: sign-in ----------------------------------------------------------
+  const keyBody = { type: 'string', minLength: 20, maxLength: 64, pattern: '^[A-Za-z0-9_-]+$' };
+
+  app.post('/api/auth/passkey/options', { config: { rateLimit: { max: 20, timeWindow: '1 minute' } } },
+    async (req) => passkeys.authenticationOptions(scope, req));
+
+  // Signature-based, so nothing to guess: a looser limit than for passwords.
+  app.post('/api/auth/passkey/verify', {
+    config: { rateLimit: { max: 30, timeWindow: '1 minute' } },
+    schema: { body: { type: 'object', required: ['key', 'response'], properties: { key: keyBody, response: { type: 'object' } } } },
+  }, async (req, reply) => {
+    let user;
+    try {
+      user = await passkeys.finishAuthentication(req.body.key, req.body.response);
+    } catch (err) {
+      audit(req, null, adminOnly ? 'admin_login_failed' : 'login_failed', { passkey: true, reason: err.message });
+      throw err;
+    }
+    if (adminOnly && !user.is_admin) {
+      audit({ account: user, ip: req.ip }, null, 'admin_login_failed', { passkey: true, reason: 'not an administrator' });
+      return reply.code(401).send({ error: 'This passkey was not accepted. Use a passkey registered for this panel.' });
+    }
+    // Passkeys always require biometrics or a PIN on the device: that's two factors,
+    // so the TOTP step (and a "2FA required" setting) is satisfied.
+    return startSession(req, reply, user, 'passkey');
+  });
+
+  // ---- Own account: passkeys -----------------------------------------------------------
+  // Adding a passkey needs a recent sign-in (or the password), so a stolen session
+  // can't quietly register the attacker's passkey.
+  const RECENT_SIGN_IN_S = 15 * 60;
+
+  app.get('/api/account/passkeys', { preHandler: app.authenticate }, async (req) => ({
+    available: passkeys.relyingParty(scope, req).usable,
+    passkeys: passkeys.listPasskeys(req.account.id),
+  }));
+
+  app.post('/api/account/passkeys/options', {
+    preHandler: app.authenticate,
+    config: { rateLimit: { max: 10, timeWindow: '1 minute' } },
+    schema: { body: { type: 'object', properties: { password: { type: 'string', maxLength: 200 } } } },
+  }, async (req, reply) => {
+    const recent = req.user.iat && Date.now() / 1000 - req.user.iat < RECENT_SIGN_IN_S;
+    if (!recent) {
+      const ok = req.body?.password
+        && await bcrypt.compare(req.body.password, db.prepare('SELECT password_hash FROM users WHERE id = ?').get(req.account.id).password_hash);
+      if (!ok) {
+        return reply.code(403).send({
+          error: req.body?.password ? 'The password is not correct' : 'Confirm with your password to add a passkey',
+          needPassword: true,
+        });
+      }
+    }
+    return passkeys.registrationOptions(scope, req, req.account);
+  });
+
+  app.post('/api/account/passkeys', {
+    preHandler: app.authenticate,
+    config: { rateLimit: { max: 10, timeWindow: '1 minute' } },
+    schema: {
+      body: {
+        type: 'object',
+        required: ['key', 'response'],
+        properties: { key: keyBody, response: { type: 'object' }, name: { type: 'string', maxLength: 60 } },
+      },
+    },
+  }, async (req, reply) => {
+    const added = await passkeys.finishRegistration(req.account, req.body.key, req.body.response, req.body.name);
+    audit(req, null, 'passkey_added', { name: added.name, synced: added.synced });
+    return reply.code(201).send(added);
+  });
+
+  app.patch('/api/account/passkeys/:id', {
+    preHandler: app.authenticate,
+    schema: { body: { type: 'object', required: ['name'], properties: { name: { type: 'string', maxLength: 60 } } } },
+  }, async (req) => {
+    passkeys.renamePasskey(req.account.id, req.params.id, req.body.name);
+    return { ok: true };
+  });
+
+  app.delete('/api/account/passkeys/:id', { preHandler: app.authenticate }, async (req, reply) => {
+    passkeys.deletePasskey(req.account.id, req.params.id);
+    audit(req, null, 'passkey_removed');
+    return reply.code(204).send();
+  });
 
   // ---- Own account: manage 2FA ------------------------------------------------
   app.get('/api/account/2fa', { preHandler: app.authenticate }, async (req) => totp.twoFactorState(req.account.id));

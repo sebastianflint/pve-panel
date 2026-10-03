@@ -78,6 +78,10 @@ export const config = {
     par: (process.env.OIDC_USE_PAR || 'auto').toLowerCase(),     // auto | always | never
     allowInsecureHttp: process.env.OIDC_ALLOW_INSECURE_HTTP === 'true', // testing only
   },
+  // Passkeys (WebAuthn): sign-in with fingerprint, face, device PIN or security key
+  passkeys: {
+    enabled: process.env.PASSKEYS_ENABLED !== 'false',
+  },
   // Show the panel version to signed-in customers (sidebar + Account page)
   showVersionToCustomers: process.env.SHOW_VERSION_TO_CUSTOMERS !== 'false',
   // Customers can connect servers to their own Tailscale account (guest agent)

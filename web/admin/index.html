@@ -124,6 +124,11 @@
           <span class="muted">If it isn't set up yet, the user has to set it up at the next sign-in before doing anything else.</span>
         </span>
       </label>
+      <div id="ta-passkey-box" class="reset-box">
+        <p class="small muted">Has <strong id="ta-passkey-count"></strong>. If a device was lost, remove them; the
+          user then signs in another way and can add new passkeys.</p>
+        <button type="button" class="btn" id="ta-remove-passkeys">Remove all passkeys</button>
+      </div>
       <div id="ta-sso-box" class="reset-box">
         <p class="small muted">Linked to single sign-on (<span id="ta-sso-issuer" class="mono"></span>). Unlink if the
           person's identity at the provider changed; the next sign-on links again by verified email.</p>

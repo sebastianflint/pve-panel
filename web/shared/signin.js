@@ -3,6 +3,7 @@
 
 import { api, esc } from '/shared/ui.js';
 import { signInSecondStep } from '/shared/twofa.js';
+import { passkeysSupported, signInWithPasskey } from '/shared/passkeys.js';
 
 const SSO_ERRORS = {
   not_found: "There's no account for this sign-in. Ask your provider to add you.",
@@ -20,9 +21,33 @@ const SSO_ERRORS = {
 
 let options = null;
 
-/** Adds the single sign-on button; hides the password fields when passwords are off. */
-export async function prepareSignIn(form) {
+/**
+ * Adds the passkey and single sign-on buttons; hides the password fields when
+ * passwords are off. onSignedIn(account) is called after a passkey sign-in.
+ */
+export async function prepareSignIn(form, { onSignedIn } = {}) {
   try { options = await api('/api/auth/options'); } catch { options = { password: true, oidc: { enabled: false } }; }
+  if (options.passkeys && passkeysSupported() && onSignedIn && !form.querySelector('.passkey-btn')) {
+    const anchor = form.querySelector('label');
+    anchor.insertAdjacentHTML('beforebegin', `
+      <button type="button" class="btn passkey-btn wide">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20c.8-3.6 3.4-5.5 6.5-5.5 1.3 0 2.5.3 3.5.9"/><circle cx="17.5" cy="13.5" r="2.5"/><path d="M17.5 16v5l1.5-1.2M17.5 18.6l1.3 1"/></svg>
+        <span>Sign in with a passkey</span>
+      </button>`);
+    const btn = form.querySelector('.passkey-btn');
+    btn.onclick = async () => {
+      const err = document.getElementById('login-error');
+      if (err) err.textContent = '';
+      btn.disabled = true;
+      try {
+        const account = await signInWithPasskey();
+        if (account) onSignedIn(account);
+      } catch (e) {
+        if (err) err.textContent = e.message;
+      }
+      btn.disabled = false;
+    };
+  }
   if (options.oidc.enabled && !form.querySelector('.sso-btn')) {
     const anchor = form.querySelector('label');
     anchor.insertAdjacentHTML('beforebegin', `
@@ -31,6 +56,9 @@ export async function prepareSignIn(form) {
         <span>${esc(options.oidc.label)}</span>
       </a>
       ${options.password ? '<div class="or-divider" role="separator"><span>or with your password</span></div>' : ''}`);
+  } else if (options.password && form.querySelector('.passkey-btn') && !form.querySelector('.or-divider')) {
+    form.querySelector('label').insertAdjacentHTML('beforebegin',
+      '<div class="or-divider" role="separator"><span>or with your password</span></div>');
   }
   if (!options.password) {
     form.querySelectorAll('label, button[type=submit]').forEach((el) => { el.hidden = true; });

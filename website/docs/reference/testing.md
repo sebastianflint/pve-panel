@@ -12,7 +12,8 @@ Releases are only published when it passes.
 |---|---|---|
 | **Unit** | 2FA codes against the RFC 6238 test vectors, encryption of secrets (incl. tamper detection), single sign-on account rules and MFA detection, version comparison, guest agent handling (stalls, lost results) | `test/unit/` |
 | **API** | The real panel process against a simulated Proxmox: sign-in, separate portals, 2FA setup/replay/recovery codes, ownership (404 for foreign servers), creating Linux and Windows servers, private networks, plan limits incl. pending resizes, reinstall (MAC kept, snapshots erased), resize, delete, email settings, invitations, VPN, Tailscale, deleting customers | `test/api/` |
-| **Browser** | Playwright with Chromium: sign-in, overview, server page, creating a server through the form, admin views | `test/e2e/` |
+| **Passkeys** | Registration and sign-in with a software authenticator (`test/support/soft-authenticator.mjs`); phishing origin, missing user verification, forged signature, replayed counter, reused challenge, re-authentication for adding passkeys | `test/api/passkeys.test.mjs` |
+| **Browser** | Playwright with Chromium: sign-in, overview, server page, creating a server through the form, admin views, passkeys with Chromium's virtual authenticator | `test/e2e/` |
 
 The simulated Proxmox (`test/support/mock-pve.mjs`) answers the API calls the panel
 uses — VMs, templates, clones, tasks, SDN, firewall, snapshots, guest agent including

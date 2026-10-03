@@ -19,7 +19,9 @@ function resetLogin() {
   $('#login-form [name=email]').focus();
 }
 
-const signInReady = prepareSignIn($('#login-form'));
+const signInReady = prepareSignIn($('#login-form'), {
+  onSignedIn: (account) => { resetLogin(); start(account); },
+});
 
 async function showLogin() {
   $('#app-view').hidden = true;

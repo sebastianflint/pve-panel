@@ -63,6 +63,9 @@ function securityHeaders(app) {
   });
 }
 
+// Browser side of passkeys (@simplewebauthn/browser, plain ES modules)
+const webauthnBrowser = path.join(root, 'node_modules', '@simplewebauthn', 'browser', 'esm');
+
 // ---- Own icon files (branding folder) ----------------------------------------
 const brandingDir = path.resolve(config.brand.dir || path.join(path.dirname(path.resolve(config.dbPath)), 'branding'));
 const ICON_FILE = /^os-(windows|linux)\.(svg|png|webp)$/;
@@ -129,6 +132,7 @@ const customer = await buildServer('customer', async (app) => {
 
   await app.register(fastifyStatic, { root: web('customer') });
   await app.register(fastifyStatic, { root: web('shared'), prefix: '/shared/', decorateReply: false });
+  await app.register(fastifyStatic, { root: webauthnBrowser, prefix: '/vendor/webauthn/', decorateReply: false });
   if (fs.existsSync(brandingDir)) await brandingFiles(app);
   await app.register(fastifyStatic, {
     root: path.join(root, 'node_modules', '@novnc', 'novnc'),
@@ -145,6 +149,7 @@ const admin = await buildServer('admin', async (app) => {
 
   await app.register(fastifyStatic, { root: web('admin') });
   await app.register(fastifyStatic, { root: web('shared'), prefix: '/shared/', decorateReply: false });
+  await app.register(fastifyStatic, { root: webauthnBrowser, prefix: '/vendor/webauthn/', decorateReply: false });
   if (fs.existsSync(brandingDir)) await brandingFiles(app);
 });
 

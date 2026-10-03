@@ -69,7 +69,7 @@ function setupPrompt() {
 }
 
 export function promptText(text, {
-  value = '', hint = '', okLabel = 'Save', minLength = 0, pattern = null, danger = false,
+  value = '', hint = '', okLabel = 'Save', minLength = 0, pattern = null, danger = false, type = 'text',
 } = {}) {
   setupPrompt();
   const dialog = $('#prompt');
@@ -79,6 +79,8 @@ export function promptText(text, {
   $('#prompt-hint').textContent = hint;
   ok.textContent = okLabel;
   ok.className = `btn ${danger ? 'danger' : 'primary'}`;
+  input.type = type;
+  input.autocomplete = type === 'password' ? 'current-password' : 'off';
   input.value = value;
   input.minLength = minLength;
   input.required = minLength > 0 || !!pattern;
