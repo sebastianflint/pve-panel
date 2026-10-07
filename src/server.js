@@ -12,6 +12,7 @@ import { db } from './db.js';
 import { bootstrapAdmin } from './bootstrap.js';
 import { versionInfo, updateStatus } from './version.js';
 import { startExpiryScheduler } from './expiry.js';
+import { currentScheme } from './appearance.js';
 import authPlugin from './auth.js';
 import vmRoutes from './routes/vms.js';
 import consoleRoutes from './routes/console.js';
@@ -108,7 +109,7 @@ async function buildServer(name, setup) {
   await app.register(cookie);
   await app.register(rateLimit, { global: false });
   // Public: the sign-in page shows the product name before anyone is signed in.
-  app.get('/api/brand', async () => ({ name: config.brand.name, osIcons: osIcons() }));
+  app.get('/api/brand', async () => ({ name: config.brand.name, osIcons: osIcons(), scheme: currentScheme() }));
   // Liveness for Docker/monitoring: the process runs and the database answers.
   app.get('/healthz', { logLevel: 'warn' }, async (req, reply) => {
     try {

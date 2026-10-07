@@ -14,6 +14,7 @@ Releases are only published when it passes.
 | **API** | The real panel process against a simulated Proxmox: sign-in, separate portals, 2FA setup/replay/recovery codes, ownership (404 for foreign servers), creating Linux and Windows servers, private networks, plan limits incl. pending resizes, reinstall (MAC kept, snapshots erased), resize, delete, email settings, invitations, VPN, Tailscale, deleting customers | `test/api/` |
 | **Passkeys** | Registration and sign-in with a software authenticator (`test/support/soft-authenticator.mjs`); phishing origin, missing user verification, forged signature, replayed counter, reused challenge, re-authentication for adding passkeys | `test/api/passkeys.test.mjs` |
 | **Expiry** | Customer rules and server dates, reminders (once, not too early), stop at expiry, self-extension, final notice, deletion after the grace period, servers you assigned kept, paused deletions, no deletion without an email warning | `test/api/expiry.test.mjs` |
+| **Appearance** | Default scheme, saving, both portals receiving it, unknown schemes refused, customers can't change it, CSS for light and dark, scheme colors in emails | `test/api/appearance.test.mjs` |
 | **Browser** | Playwright with Chromium: sign-in, overview, server page, creating a server through the form, admin views, passkeys with Chromium's virtual authenticator | `test/e2e/` |
 
 The simulated Proxmox (`test/support/mock-pve.mjs`) answers the API calls the panel

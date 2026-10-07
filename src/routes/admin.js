@@ -3,6 +3,7 @@ import { db, audit } from '../db.js';
 import { pve, clusterGuests, locateGuest, locateTemplate, invalidateGuestCache, guestPath } from '../pve.js';
 import { startCustomerDeletion, deletionPlan, destroyServer, isProtected } from '../cleanup.js';
 import { tailscaleOverview } from '../tailscale.js';
+import { SCHEMES, currentScheme, setScheme } from '../appearance.js';
 import * as totp from '../totp.js';
 import { deleteAllPasskeys } from '../passkeys.js';
 import {
@@ -359,6 +360,17 @@ export default async function adminRoutes(app) {
     }
     const updated = db.prepare('SELECT * FROM vms WHERE vmid = ?').get(vmid);
     return { vmid, expiry: expiryInfo(updated), expiryManual: !!updated.expiry_manual };
+  });
+
+  // ---- Settings: appearance (color scheme for everyone) -----------------------
+  app.get('/api/admin/settings/appearance', async () => ({ scheme: currentScheme(), schemes: SCHEMES }));
+
+  app.put('/api/admin/settings/appearance', {
+    schema: { body: { type: 'object', required: ['scheme'], additionalProperties: false, properties: { scheme: { type: 'string', maxLength: 30 } } } },
+  }, async (req) => {
+    const scheme = setScheme(req.body.scheme);
+    audit(req, null, 'admin_appearance', { scheme });
+    return { scheme, schemes: SCHEMES };
   });
 
   app.get('/api/admin/settings/expiry', async () => expirySettings());

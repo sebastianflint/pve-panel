@@ -5,6 +5,7 @@ import nodemailer from 'nodemailer';
 import { db } from './db.js';
 import { config } from './config.js';
 import { seal, open } from './secrets.js';
+import { schemeColors } from './appearance.js';
 
 const KEY = 'email';
 const PURPOSE = 'smtp-password';
@@ -114,14 +115,15 @@ const esc = (t) => String(t ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '
 
 function layout({ title, paragraphs, button, footer }) {
   const brand = esc(config.brand.name);
+  const { accent, side } = schemeColors(); // the panel's color scheme
   return `<!doctype html><html><body style="margin:0;background:#eef2f6;font-family:Segoe UI,Helvetica,Arial,sans-serif;color:#172230">
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#eef2f6;padding:32px 12px"><tr><td align="center">
 <table role="presentation" width="560" cellpadding="0" cellspacing="0" style="max-width:560px;width:100%;background:#ffffff;border-radius:14px;border:1px solid #d9e0e8">
-<tr><td style="background:#172230;color:#e6ecf3;padding:18px 28px;border-radius:14px 14px 0 0;font-size:17px;font-weight:700">${brand}</td></tr>
+<tr><td style="background:${side};color:#ffffff;padding:18px 28px;border-radius:14px 14px 0 0;font-size:17px;font-weight:700">${brand}</td></tr>
 <tr><td style="padding:28px">
 <h1 style="margin:0 0 16px;font-size:22px">${esc(title)}</h1>
 ${paragraphs.map((p) => `<p style="margin:0 0 14px;font-size:15px;line-height:1.55">${p}</p>`).join('\n')}
-${button ? `<p style="margin:22px 0"><a href="${esc(button.href)}" style="background:#3558e6;color:#ffffff;text-decoration:none;padding:12px 20px;border-radius:8px;font-weight:600;display:inline-block">${esc(button.label)}</a></p>
+${button ? `<p style="margin:22px 0"><a href="${esc(button.href)}" style="background:${accent};color:#ffffff;text-decoration:none;padding:12px 20px;border-radius:8px;font-weight:600;display:inline-block">${esc(button.label)}</a></p>
 <p style="margin:0 0 14px;font-size:13px;color:#5a6878">If the button doesn't work, copy this address into your browser:<br><span style="word-break:break-all">${esc(button.href)}</span></p>` : ''}
 ${footer ? `<p style="margin:22px 0 0;font-size:13px;color:#5a6878">${footer}</p>` : ''}
 </td></tr></table></td></tr></table></body></html>`;

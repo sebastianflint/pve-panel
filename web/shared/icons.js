@@ -54,6 +54,16 @@ export function brandMark(size = 28) {
   </svg>`;
 }
 
+// Color scheme: apply the last known one immediately (no flash of the default
+// colors), then whatever the server says. Set by an admin for everyone.
+const SCHEME_KEY = 'pve-panel.scheme';
+export function applyScheme(id) {
+  if (!id) return;
+  document.documentElement.dataset.scheme = id;
+  try { localStorage.setItem(SCHEME_KEY, id); } catch { /* storage unavailable */ }
+}
+try { const remembered = localStorage.getItem(SCHEME_KEY); if (remembered) document.documentElement.dataset.scheme = remembered; } catch { /* ignore */ }
+
 /** Fetches the product name and applies it to the page (title + [data-brand]). */
 export async function applyBrand(suffix = '') {
   let name = 'PVE Panel';
@@ -63,6 +73,7 @@ export async function applyBrand(suffix = '') {
       const b = await r.json();
       name = b.name || name;
       customOsIcons = b.osIcons ?? {};
+      applyScheme(b.scheme);
     }
   } catch { /* keep default */ }
   document.querySelectorAll('[data-brand]').forEach((el) => { el.textContent = name; });

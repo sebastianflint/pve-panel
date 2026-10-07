@@ -1,6 +1,7 @@
 import { icon } from '/shared/icons.js';
 import { renderSecurity } from '/shared/twofa.js';
 import { renderPasskeys } from '/shared/passkeys.js';
+import { applyScheme } from '/shared/icons.js';
 
 // Administration area: assign servers, manage customers, read the activity log.
 // Receives the shared helpers from app.js so it behaves like the rest of the panel.
@@ -53,6 +54,7 @@ const ACTION_LABELS = {
   admin_expiry_rule: 'Changed customer expiry rule',
   admin_expiry_settings: 'Changed expiry settings',
   admin_expiry_run: 'Ran expiry check',
+  admin_appearance: 'Changed the color scheme',
   server_reinstalled: 'Reinstalled server',
   server_reinstall_failed: 'Reinstalling server failed',
   invite_accepted: 'Accepted invitation, password set',
@@ -109,7 +111,9 @@ export function createAdmin({ root, api, toast, fail, confirmAction, promptText,
         [st.users, st.email] = await Promise.all([api('/api/admin/users'), api('/api/admin/settings/email')]);
         if (!quiet) setTimeout(watchDeletions);
       } else if (st.tab === 'settings') {
-        [st.email, st.expiry] = await Promise.all([api('/api/admin/settings/email'), api('/api/admin/settings/expiry')]);
+        [st.email, st.expiry, st.appearance] = await Promise.all([
+          api('/api/admin/settings/email'), api('/api/admin/settings/expiry'), api('/api/admin/settings/appearance'),
+        ]);
       } else if (st.tab === 'about') {
         st.about = await api(`/api/admin/about${st.refreshAbout ? '?refresh=1' : ''}`);
         st.refreshAbout = false;
@@ -158,6 +162,7 @@ export function createAdmin({ root, api, toast, fail, confirmAction, promptText,
     }
     if (st.tab === 'about') renderAbout();
     if (st.tab === 'settings') renderSettings();
+    if (st.tab !== 'settings' && st.schemePreview) { st.schemePreview = null; applyScheme(st.appearance?.scheme); }
   }
 
   // ---- servers ----------------------------------------------------------
@@ -859,8 +864,35 @@ export function createAdmin({ root, api, toast, fail, confirmAction, promptText,
   function renderSettings() {
     const e = st.email;
     const me = getMe();
+    const ap = st.appearance;
     root.querySelector('#admin-body').innerHTML = `
       <div class="settings">
+        <section class="security-card settings-card">
+          <div class="settings-head">
+            <h2 class="twofa-title">Appearance</h2>
+            <p class="muted">The color scheme for everyone: this admin interface, the customer portal, the sign-in pages
+              and emails. Each scheme has a light and a dark variant; the panel follows each device's light/dark setting.</p>
+          </div>
+          <div class="scheme-grid" role="radiogroup" aria-label="Color scheme">
+            ${ap.schemes.map((sc) => `
+              <button type="button" class="scheme-tile" role="radio" data-scheme-pick="${esc(sc.id)}"
+                      aria-checked="${sc.id === ap.scheme}">
+                <span class="scheme-preview" aria-hidden="true">
+                  <span class="sp-side" style="background:${esc(sc.side)}"><i></i><i></i><i></i></span>
+                  <span class="sp-main"><span class="sp-line"></span><span class="sp-line short"></span>
+                    <span class="sp-btn" style="background:${esc(sc.accent)}"></span></span>
+                </span>
+                <span class="scheme-name">${esc(sc.name)}${sc.id === ap.scheme ? ' <span class="pill pill-running">Active</span>' : ''}</span>
+                <span class="muted small">${esc(sc.description)}</span>
+              </button>`).join('')}
+          </div>
+          <div class="row">
+            <button type="button" class="btn primary" data-scheme-save disabled>Save for everyone</button>
+            <button type="button" class="btn ghost" data-scheme-cancel hidden>Cancel preview</button>
+            <span class="muted small" id="scheme-note"></span>
+          </div>
+        </section>
+
         <section class="security-card settings-card">
           <div class="settings-head">
             <h2 class="twofa-title">Email <span class="pill ${e.configured ? 'pill-running' : ''}">${e.configured ? 'Configured' : 'Not set up'}</span></h2>
@@ -1175,6 +1207,35 @@ export function createAdmin({ root, api, toast, fail, confirmAction, promptText,
 
     if (t.hasAttribute('data-refresh-audit')) {
       load();
+      return;
+    }
+
+    if (t.dataset.schemePick) {
+      // live preview on this page; Save applies it for everyone
+      st.schemePreview = t.dataset.schemePick;
+      document.documentElement.dataset.scheme = st.schemePreview;
+      root.querySelectorAll('[data-scheme-pick]').forEach((b) => b.setAttribute('aria-checked', String(b === t)));
+      const changed = st.schemePreview !== st.appearance.scheme;
+      root.querySelector('[data-scheme-save]').disabled = !changed;
+      root.querySelector('[data-scheme-cancel]').hidden = !changed;
+      root.querySelector('#scheme-note').textContent = changed ? 'Preview on this page only. Save to apply it everywhere.' : '';
+      return;
+    }
+    if (t.hasAttribute('data-scheme-cancel')) {
+      st.schemePreview = null;
+      applyScheme(st.appearance.scheme);
+      renderSettings();
+      return;
+    }
+    if (t.hasAttribute('data-scheme-save')) {
+      try {
+        st.appearance = await api('/api/admin/settings/appearance', { method: 'PUT', body: { scheme: st.schemePreview } });
+        applyScheme(st.appearance.scheme);
+        st.schemePreview = null;
+        const name = st.appearance.schemes.find((x) => x.id === st.appearance.scheme)?.name;
+        toast(`Color scheme “${name}” is now used everywhere. Open pages pick it up when they reload.`);
+        renderSettings();
+      } catch (err) { fail(err); }
       return;
     }
 
