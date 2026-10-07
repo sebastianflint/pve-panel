@@ -34,7 +34,11 @@ customer portal, both sign-in pages and the emails the panel sends.
   Open pages pick it up when they reload.
 - Every scheme has a **light and a dark variant**; the panel follows each device's light/dark
   setting.
-- All text reaches at least **4.5:1 contrast** (WCAG AA) in every scheme and mode.
+- All text reaches at least **4.5:1 contrast** (WCAG AA; 3:1 for large text) in every scheme
+  and mode. This is **measured on the rendered pages** by an automated browser test — every
+  visible text, including form fields and placeholders, on the customer and admin pages, in
+  all five schemes, light and dark — so a scheme can't ship with unreadable text.
+- Charts use two clearly different colors in every scheme (e.g. green and amber in *Forest*).
 - Status colors — green *running*, orange warnings, red for dangerous actions — are the same in
   every scheme, so they always mean the same thing.
 - Users can't choose their own scheme (yet); the setting applies to everyone.
