@@ -1,0 +1,51 @@
+// Every visible text must be readable (WCAG AA: 4.5:1, large text 3:1) in every
+// color scheme, in light and dark mode — measured on the rendered pages.
+import fs from 'node:fs';
+import { test, expect } from '@playwright/test';
+
+const audit = fs.readFileSync(new URL('../support/contrast-audit.js', import.meta.url), 'utf8');
+const SCHEMES = ['harbor', 'forest', 'ember', 'orchid', 'graphite'];
+const C = () => process.env.E2E_CUSTOMER_URL;
+const A = () => process.env.E2E_ADMIN_URL;
+
+for (const mode of ['light', 'dark']) {
+  test(`text contrast in every color scheme (${mode} mode)`, async ({ browser }) => {
+    test.setTimeout(120_000);
+    const admin = await (await browser.newContext({ colorScheme: mode })).newPage();
+    await admin.request.post(`${A()}/api/auth/login`, { data: { email: 'admin@example.com', password: 'correct-horse-battery' } });
+    const customer = await (await browser.newContext({ colorScheme: mode })).newPage();
+    await customer.request.post(`${C()}/api/auth/login`, { data: { email: 'lena@example.com', password: 'another-long-password' } });
+    const visitor = await (await browser.newContext({ colorScheme: mode })).newPage();
+
+    const problems = [];
+    const check = async (page, scheme, where) => {
+      for (const p of await page.evaluate(audit)) problems.push(`${scheme}/${mode} ${where}: “${p.text}” ${p.ratio}:1 (needs ${p.need}:1)`);
+    };
+    try {
+      for (const scheme of SCHEMES) {
+        const r = await admin.request.put(`${A()}/api/admin/settings/appearance`, { data: { scheme } });
+        expect(r.ok()).toBeTruthy();
+
+        await visitor.goto(C());
+        await expect(visitor.locator('html')).toHaveAttribute('data-scheme', scheme);
+        await expect(visitor.locator('#login-form [name=email]')).toBeVisible();
+        await check(visitor, scheme, 'sign-in');
+
+        await customer.goto(C());
+        await expect(customer.locator('html')).toHaveAttribute('data-scheme', scheme);
+        await expect(customer.locator('.server-row').first()).toBeVisible();
+        await check(customer, scheme, 'overview');
+        await customer.locator('.server-row[data-vmid="101"]').click();
+        await expect(customer.locator('.specs')).toBeVisible();
+        await check(customer, scheme, 'server page');
+
+        await admin.goto(A());
+        await expect(admin.locator('#vm-rows tr').first()).toBeVisible();
+        await check(admin, scheme, 'admin servers');
+      }
+    } finally {
+      await admin.request.put(`${A()}/api/admin/settings/appearance`, { data: { scheme: 'harbor' } });
+    }
+    expect(problems, problems.join('\n')).toEqual([]);
+  });
+}

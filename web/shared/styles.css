@@ -157,7 +157,7 @@ label { display: grid; gap: 6px; font-weight: 600; font-size: 14px; }
   color: var(--muted);
 }
 .pill::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
-.pill-running { background: color-mix(in srgb, var(--run) 14%, transparent); color: color-mix(in srgb, var(--run) 72%, var(--ink)); }
+.pill-running { background: color-mix(in srgb, var(--run) 14%, transparent); color: color-mix(in srgb, var(--run) 55%, var(--ink)); }
 .pill-busy { background: color-mix(in srgb, var(--warn) 18%, transparent); color: color-mix(in srgb, var(--warn) 62%, var(--ink)); }
 .pill-failed { background: color-mix(in srgb, var(--danger) 13%, transparent); color: var(--danger); }
 
@@ -264,6 +264,8 @@ label { display: grid; gap: 6px; font-weight: 600; font-size: 14px; }
 .unit-text { display: grid; min-width: 0; }
 .unit-name { font-size: 14px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .unit-meta { font-size: 12.5px; color: var(--side-muted); }
+/* the highlighted row is lighter: keep its secondary text readable */
+.unit[aria-current="true"] .unit-meta, .unit:hover .unit-meta { color: color-mix(in srgb, var(--side-muted) 65%, var(--side-ink)); }
 .side-empty { padding: 6px 10px; font-size: 13.5px; color: var(--side-muted); }
 
 .side-foot {
@@ -765,6 +767,7 @@ dialog p { margin: 0 0 20px; }
    "harbor" is the default above. Status colors (run/warn/danger) never change.
    ========================================================================= */
 :root[data-scheme="forest"] {
+  --chart-b: #b7701a;
   --ink: #132a20;
   --bg: #edf3ef;
   --surface-2: #f5f9f6;
@@ -778,6 +781,8 @@ dialog p { margin: 0 0 20px; }
 }
 @media (prefers-color-scheme: dark) {
   :root[data-scheme="forest"] {
+    --chart-b: #f0b04d;
+    --ink: #e3efe8;
     --bg: #0d1713;
     --surface: #14221c;
     --surface-2: #192a22;
@@ -804,6 +809,7 @@ dialog p { margin: 0 0 20px; }
 }
 @media (prefers-color-scheme: dark) {
   :root[data-scheme="ember"] {
+    --ink: #f3e8e2;
     --bg: #16100c;
     --surface: #201813;
     --surface-2: #271e18;
@@ -830,6 +836,7 @@ dialog p { margin: 0 0 20px; }
 }
 @media (prefers-color-scheme: dark) {
   :root[data-scheme="orchid"] {
+    --ink: #ece6f6;
     --bg: #130e1c;
     --surface: #1b1528;
     --surface-2: #221b31;
@@ -843,6 +850,7 @@ dialog p { margin: 0 0 20px; }
 }
 
 :root[data-scheme="graphite"] {
+  --chart-b: #8a4fd8;
   --ink: #202427;
   --bg: #f0f1f2;
   --surface-2: #f6f7f8;
@@ -856,6 +864,8 @@ dialog p { margin: 0 0 20px; }
 }
 @media (prefers-color-scheme: dark) {
   :root[data-scheme="graphite"] {
+    --chart-b: #c4a7ff;
+    --ink: #e8ebed;
     --bg: #111315;
     --surface: #181b1d;
     --surface-2: #1e2225;
