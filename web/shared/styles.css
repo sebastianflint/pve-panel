@@ -23,6 +23,7 @@
   --side-active: rgb(255 255 255 / 0.11);
 
   /* aliases used by older markup and the console page */
+  --signal-soft: #7c94ff;      /* accent on dark backgrounds (sign-in graphic) */
   --accent: var(--signal);
   --accent-ink: var(--signal-ink);
   --idle: #9aa6b2;
@@ -183,11 +184,11 @@ label { display: grid; gap: 6px; font-weight: 600; font-size: 14px; }
 .login-brand.small { display: none; color: var(--ink); }
 .login-graphic { width: min(460px, 100%); height: auto; align-self: center; justify-self: center; }
 .lg-edges path { stroke: var(--side-muted); stroke-width: 1.5; opacity: .5; fill: none; }
-.lg-edges .lg-dash { stroke: #7c94ff; stroke-dasharray: 3 6; opacity: .9; }
-.lg-hub { fill: #3558e6; }
+.lg-edges .lg-dash { stroke: var(--signal-soft); stroke-dasharray: 3 6; opacity: .9; }
+.lg-hub { fill: var(--signal); }
 .lg-node { fill: var(--side); stroke: var(--side-muted); stroke-width: 2; }
 .lg-node.run { stroke: #3ccb8c; }
-.lg-vpn { fill: var(--side); stroke: #7c94ff; stroke-width: 2; }
+.lg-vpn { fill: var(--side); stroke: var(--signal-soft); stroke-width: 2; }
 .login-claim { margin: 0; max-width: 34ch; font-size: 22px; line-height: 1.35; font-weight: 600; letter-spacing: -0.01em; }
 .login-graphic .lg-node, .login-graphic .lg-vpn { animation: pop .5s both; }
 .login-graphic .lg-node:nth-of-type(2) { animation-delay: .08s; }
@@ -652,6 +653,23 @@ dialog#twofa-admin { max-width: min(540px, calc(100vw - 32px)); }
 .inline-check { display: inline-flex; gap: 6px; align-items: center; font-weight: 400; }
 .inline-check input { width: auto; }
 
+/* Appearance: scheme tiles */
+.scheme-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 12px; }
+.scheme-tile {
+  display: grid; gap: 6px; align-content: start; text-align: left; padding: 10px; cursor: pointer; font: inherit; color: var(--ink);
+  background: var(--surface); border: 2px solid var(--line); border-radius: var(--r-md);
+}
+.scheme-tile:hover { border-color: var(--muted); }
+.scheme-tile[aria-checked="true"] { border-color: var(--signal); box-shadow: 0 0 0 3px color-mix(in srgb, var(--signal) 20%, transparent); }
+.scheme-preview { display: flex; height: 64px; border-radius: 8px; overflow: hidden; border: 1px solid var(--line); background: #eef1f4; }
+.sp-side { width: 32%; display: grid; align-content: start; gap: 5px; padding: 8px 6px; }
+.sp-side i { display: block; height: 4px; border-radius: 2px; background: rgb(255 255 255 / 0.35); }
+.sp-main { flex: 1; display: grid; align-content: start; gap: 5px; padding: 8px; }
+.sp-line { height: 5px; border-radius: 3px; background: #c9d1da; }
+.sp-line.short { width: 60%; }
+.sp-btn { width: 44%; height: 12px; border-radius: 4px; margin-top: 4px; }
+.scheme-name { font-weight: 700; display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+
 /* Version / About */
 .side-foot { flex-wrap: wrap; }
 .side-foot .account-btn { flex: 1 1 0; min-width: 0; }
@@ -740,4 +758,112 @@ dialog p { margin: 0 0 20px; }
   .shell { background: var(--bg); }
   .map-card { overflow-x: auto; }
   .netmap { min-width: 600px; }
+}
+
+/* =========================================================================
+   Color schemes (Settings → Appearance; set as data-scheme on <html>).
+   "harbor" is the default above. Status colors (run/warn/danger) never change.
+   ========================================================================= */
+:root[data-scheme="forest"] {
+  --ink: #132a20;
+  --bg: #edf3ef;
+  --surface-2: #f5f9f6;
+  --line: #d6e2da;
+  --muted: #566b5f;
+  --signal: #1d7350;
+  --side: #132a20;
+  --side-ink: #e3efe8;
+  --side-muted: #93ad9f;
+  --signal-soft: #6fd9a8;
+}
+@media (prefers-color-scheme: dark) {
+  :root[data-scheme="forest"] {
+    --bg: #0d1713;
+    --surface: #14221c;
+    --surface-2: #192a22;
+    --line: #27392f;
+    --muted: #93ad9f;
+    --signal: #4cc993;
+    --signal-ink: #0c1712;
+    --side: #09140f;
+    --signal-soft: #6fd9a8;
+  }
+}
+
+:root[data-scheme="ember"] {
+  --ink: #2a1c15;
+  --bg: #f6f1ed;
+  --surface-2: #faf6f3;
+  --line: #e7dbd3;
+  --muted: #6e5d53;
+  --signal: #b9400f;
+  --side: #2a1c15;
+  --side-ink: #f3e8e2;
+  --side-muted: #b8a397;
+  --signal-soft: #ffab7d;
+}
+@media (prefers-color-scheme: dark) {
+  :root[data-scheme="ember"] {
+    --bg: #16100c;
+    --surface: #201813;
+    --surface-2: #271e18;
+    --line: #3b2e26;
+    --muted: #b8a397;
+    --signal: #ff8f57;
+    --signal-ink: #1a110c;
+    --side: #140d09;
+    --signal-soft: #ffab7d;
+  }
+}
+
+:root[data-scheme="orchid"] {
+  --ink: #221836;
+  --bg: #f2f0f8;
+  --surface-2: #f8f6fc;
+  --line: #ddd8ec;
+  --muted: #62597a;
+  --signal: #7339e0;
+  --side: #221836;
+  --side-ink: #ece6f6;
+  --side-muted: #aa9dc6;
+  --signal-soft: #c4b1ff;
+}
+@media (prefers-color-scheme: dark) {
+  :root[data-scheme="orchid"] {
+    --bg: #130e1c;
+    --surface: #1b1528;
+    --surface-2: #221b31;
+    --line: #362c4b;
+    --muted: #aa9dc6;
+    --signal: #b49cff;
+    --signal-ink: #140f20;
+    --side: #0f0a19;
+    --signal-soft: #c4b1ff;
+  }
+}
+
+:root[data-scheme="graphite"] {
+  --ink: #202427;
+  --bg: #f0f1f2;
+  --surface-2: #f6f7f8;
+  --line: #dcdfe2;
+  --muted: #5b6368;
+  --signal: #0d7068;
+  --side: #202427;
+  --side-ink: #e8ebed;
+  --side-muted: #a0a8ad;
+  --signal-soft: #5ee6d3;
+}
+@media (prefers-color-scheme: dark) {
+  :root[data-scheme="graphite"] {
+    --bg: #111315;
+    --surface: #181b1d;
+    --surface-2: #1e2225;
+    --line: #2f3438;
+    --muted: #a0a8ad;
+    --signal: #2fd3bd;
+    --signal-ink: #0f1213;
+    --side: #0b0d0e;
+    --signal-soft: #5ee6d3;
+  }
 }

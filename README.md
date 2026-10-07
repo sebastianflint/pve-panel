@@ -1048,6 +1048,13 @@ The configured name is used on:
 - customer portal
 - administrator portal
 - the authenticator app entry for 2FA
+- emails sent by the panel (colors follow the color scheme)
+
+### Color schemes
+
+Five color schemes — **Harbor** (default), **Forest**, **Ember**, **Orchid**, **Graphite** — each with a light and dark variant. Set in **Settings → Appearance** for everyone: admin interface, customer portal, sign-in pages and emails.
+
+![Color schemes](docs/screenshots/color-schemes.png)
 
 ### Own OS icons
 
@@ -1091,6 +1098,7 @@ Only these file names are served, with a strict sandbox policy. Make sure you're
 │   ├── totp.js
 │   ├── passkeys.js
 │   ├── expiry.js
+│   ├── appearance.js
 │   ├── oidc.js
 │   ├── vpn.js
 │   ├── agent.js
