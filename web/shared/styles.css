@@ -662,6 +662,19 @@ dialog#twofa-admin { max-width: min(540px, calc(100vw - 32px)); }
 .inline-check { display: inline-flex; gap: 6px; align-items: center; font-weight: 400; }
 .inline-check input { width: auto; }
 
+/* Windows updates */
+.updates { max-width: 760px; display: grid; gap: 14px; }
+.updates .h2 { margin: 0; }
+.updates-lede { margin: -6px 0 0; max-width: 64ch; }
+.update-form { display: grid; gap: 14px; }
+.update-bar { height: 8px; border-radius: 4px; background: var(--surface-2); border: 1px solid var(--line); overflow: hidden; }
+.update-bar span { display: block; height: 100%; background: var(--signal); transition: width .4s; }
+.update-restart, .update-last { display: grid; gap: 8px; margin: 0; }
+.update-restart { grid-template-columns: 1fr auto; align-items: center; }
+.update-restart p, .update-last p { margin: 0; }
+.update-list { margin: 8px 0 0; padding-left: 18px; display: grid; gap: 4px; font-size: 14px; }
+.update-details summary { cursor: pointer; color: var(--muted); font-size: 14px; }
+
 /* Appearance: scheme tiles */
 .scheme-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 12px; }
 .scheme-tile {

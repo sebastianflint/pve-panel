@@ -11,6 +11,7 @@ import { vpnInfoFor } from '../vpn.js';
 import { tailscaleStatus, connectTailscale, disconnectTailscale } from '../tailscale.js';
 import { versionInfo } from '../version.js';
 import { expiryInfo, expirySettings, customerExtend } from '../expiry.js';
+import { updateInfo, startUpdates, refreshForServer } from '../winupdate.js';
 
 const ownedByUser = db.prepare('SELECT * FROM vms WHERE vmid = ? AND user_id = ?');
 const listForUser = db.prepare('SELECT * FROM vms WHERE user_id = ? ORDER BY vmid');
@@ -227,6 +228,35 @@ export default async function vmRoutes(app) {
     if (badSshKeys(req.body.sshKeys)) return reply.code(400).send({ error: SSH_KEY_ERROR });
     await reinstallServer(req, row, { ...req.body });
     return reply.code(202).send({ started: true });
+  });
+
+  // ---- Windows updates ---------------------------------------------------------
+  app.get('/api/vms/:vmid/updates', async (req) => {
+    const vmid = Number(req.params.vmid);
+    const row = Number.isInteger(vmid) ? ownedByUser.get(vmid, req.account.id) : null;
+    if (!row) throw notFound();
+    await refreshForServer(row);            // fresh progress while someone watches
+    return updateInfo(row);
+  });
+
+  app.post('/api/vms/:vmid/updates', {
+    config: { rateLimit: { max: 10, timeWindow: '1 hour' } },
+    schema: {
+      body: {
+        type: 'object',
+        additionalProperties: false,
+        properties: {
+          scope: { type: 'string', enum: ['security', 'all'] },
+          snapshot: { type: 'boolean' },
+          autoRestart: { type: 'boolean' },
+        },
+      },
+    },
+  }, async (req, reply) => {
+    const vmid = Number(req.params.vmid);
+    const row = Number.isInteger(vmid) ? ownedByUser.get(vmid, req.account.id) : null;
+    if (!row) throw notFound();
+    return reply.code(202).send(await startUpdates(req, row, req.body));
   });
 
   // The customer's one self-service extension (if allowed for them)

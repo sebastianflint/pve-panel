@@ -194,6 +194,25 @@ addColumn('vms', 'expired_at', 'TEXT');                    // stopped by expiry;
 addColumn('vms', 'expiry_notified', 'TEXT');               // JSON: emails already sent
 addColumn('vms', 'self_extended', 'INTEGER NOT NULL DEFAULT 0');
 
+// Windows updates started through the panel (one row per run)
+db.exec(`
+  CREATE TABLE IF NOT EXISTS winupdates (
+    id           INTEGER PRIMARY KEY AUTOINCREMENT,
+    vmid         INTEGER NOT NULL REFERENCES vms(vmid) ON DELETE CASCADE,
+    user_id      INTEGER NOT NULL,
+    run_id       TEXT NOT NULL,
+    scope        TEXT NOT NULL,
+    auto_restart INTEGER NOT NULL DEFAULT 1,
+    snapshot     TEXT,
+    state        TEXT NOT NULL,
+    status_json  TEXT,
+    error        TEXT,
+    started_at   TEXT NOT NULL DEFAULT (datetime('now')),
+    finished_at  TEXT
+  );
+  CREATE INDEX IF NOT EXISTS winupdates_vm ON winupdates(vmid);
+`);
+
 // Background jobs don't survive a restart; don't leave servers stuck forever.
 db.exec(`
   UPDATE vms SET state = 'failed', error = 'Setup was interrupted because the panel restarted'

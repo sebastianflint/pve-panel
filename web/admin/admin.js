@@ -55,6 +55,10 @@ const ACTION_LABELS = {
   admin_expiry_settings: 'Changed expiry settings',
   admin_expiry_run: 'Ran expiry check',
   admin_appearance: 'Changed the color scheme',
+  admin_winupdates: 'Changed Windows update setting',
+  winupdate_started: 'Started Windows updates',
+  winupdate_finished: 'Windows updates finished',
+  winupdate_failed: 'Windows updates failed',
   server_reinstalled: 'Reinstalled server',
   server_reinstall_failed: 'Reinstalling server failed',
   invite_accepted: 'Accepted invitation, password set',
@@ -111,8 +115,9 @@ export function createAdmin({ root, api, toast, fail, confirmAction, promptText,
         [st.users, st.email] = await Promise.all([api('/api/admin/users'), api('/api/admin/settings/email')]);
         if (!quiet) setTimeout(watchDeletions);
       } else if (st.tab === 'settings') {
-        [st.email, st.expiry, st.appearance] = await Promise.all([
+        [st.email, st.expiry, st.appearance, st.winupdates] = await Promise.all([
           api('/api/admin/settings/email'), api('/api/admin/settings/expiry'), api('/api/admin/settings/appearance'),
+          api('/api/admin/settings/winupdates'),
         ]);
       } else if (st.tab === 'about') {
         st.about = await api(`/api/admin/about${st.refreshAbout ? '?refresh=1' : ''}`);
@@ -937,6 +942,17 @@ export function createAdmin({ root, api, toast, fail, confirmAction, promptText,
 
         <section class="security-card settings-card">
           <div class="settings-head">
+            <h2 class="twofa-title">Windows updates</h2>
+            <p class="muted">Customers can install Windows updates on their Windows servers from the server page
+              (Updates tab): security or all quality updates, optionally with a snapshot first and automatic restarts.
+              Feature upgrades and previews are never installed.</p>
+          </div>
+          <label class="check"><input type="checkbox" data-winupdates ${st.winupdates?.enabled ? 'checked' : ''}>
+            <span>Allow customers to install Windows updates</span></label>
+        </section>
+
+        <section class="security-card settings-card">
+          <div class="settings-head">
             <h2 class="twofa-title">Server expiry</h2>
             <p class="muted">For customers or servers you give an expiry date (customer: <em>Limits</em>; server: the
               clock button in <em>Servers</em>). Reminders by email, stopped at expiry, deleted after the grace period —
@@ -1354,7 +1370,15 @@ export function createAdmin({ root, api, toast, fail, confirmAction, promptText,
     }
   });
 
-  root.addEventListener('change', (e) => {
+  root.addEventListener('change', async (e) => {
+    if (e.target.matches?.('[data-winupdates]')) {
+      const box = e.target;
+      try {
+        st.winupdates = await api('/api/admin/settings/winupdates', { method: 'PUT', body: { enabled: box.checked } });
+        toast(st.winupdates.enabled ? 'Customers can install Windows updates' : 'Windows updates through the panel are switched off');
+      } catch (err) { fail(err); box.checked = !box.checked; }
+      return;
+    }
     if (e.target.name === 'invite' && e.target.closest('#user-form')) {
       const form = e.target.closest('#user-form');
       const on = e.target.checked;

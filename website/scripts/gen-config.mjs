@@ -18,7 +18,7 @@ const TOPICS = [
   ['Customer networks', /^(CUSTOMER_|SDN_)/],
   ['WireGuard VPN', /^VPN_/],
   ['Tailscale', /^TAILSCALE_/],
-  ['Windows and guest agent', /^(WINDOWS_|AGENT_)/],
+  ['Windows and guest agent', /^(WINDOWS_|AGENT_|WINUPDATE_)/],
   ['Limits', /^MAX_/],
   ['Branding and versions', /^(PANEL_NAME|BRANDING_DIR|SHOW_VERSION_TO_CUSTOMERS|UPDATE_CHECK)/],
   ['Server expiry', /^EXPIRY_/],
