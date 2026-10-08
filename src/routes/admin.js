@@ -4,6 +4,7 @@ import { pve, clusterGuests, locateGuest, locateTemplate, invalidateGuestCache, 
 import { startCustomerDeletion, deletionPlan, destroyServer, isProtected } from '../cleanup.js';
 import { tailscaleOverview } from '../tailscale.js';
 import { SCHEMES, currentScheme, setScheme } from '../appearance.js';
+import { updatesEnabled, setUpdatesEnabled } from '../winupdate.js';
 import * as totp from '../totp.js';
 import { deleteAllPasskeys } from '../passkeys.js';
 import {
@@ -371,6 +372,16 @@ export default async function adminRoutes(app) {
     const scheme = setScheme(req.body.scheme);
     audit(req, null, 'admin_appearance', { scheme });
     return { scheme, schemes: SCHEMES };
+  });
+
+  // ---- Settings: Windows updates through the panel -----------------------------
+  app.get('/api/admin/settings/winupdates', async () => ({ enabled: updatesEnabled() }));
+  app.put('/api/admin/settings/winupdates', {
+    schema: { body: { type: 'object', required: ['enabled'], additionalProperties: false, properties: { enabled: { type: 'boolean' } } } },
+  }, async (req) => {
+    setUpdatesEnabled(req.body.enabled);
+    audit(req, null, 'admin_winupdates', { enabled: req.body.enabled });
+    return { enabled: updatesEnabled() };
   });
 
   app.get('/api/admin/settings/expiry', async () => expirySettings());

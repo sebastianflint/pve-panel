@@ -10,5 +10,6 @@ export default async function globalSetup() {
 
   process.env.E2E_CUSTOMER_URL = stack.customerUrl;
   process.env.E2E_ADMIN_URL = stack.adminUrl;
+  process.env.E2E_MOCK_URL = stack.mock.url;
   return async () => stack.stop();
 }

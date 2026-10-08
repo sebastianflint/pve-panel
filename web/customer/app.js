@@ -321,6 +321,7 @@ function renderDetail() {
   ].filter(Boolean).join(', ');
   const tabs = [['overview', 'Overview', 'chart'], ['snapshots', 'Snapshots', 'camera'], ['console', 'Console', 'terminal']];
   if (state.account.tailscale) tabs.push(['remote', 'Remote access', 'link']);
+  if (vm.osFamily === 'windows') tabs.push(['updates', 'Updates', 'download']);
 
   $('#detail').innerHTML = `
     <div class="page">
@@ -356,6 +357,7 @@ function renderTab() {
   if (state.tab === 'snapshots') renderSnapshots(body);
   if (state.tab === 'console') renderConsole(body);
   if (state.tab === 'remote') renderRemote(body);
+  if (state.tab === 'updates') renderUpdates(body);
 }
 
 function renderOverview(body) {
@@ -914,6 +916,106 @@ function onTemplateChange(form) {
   if (!form.username.dataset.edited && tpl.setup !== 'windows') form.username.value = tpl.defaultUser || 'admin';
   applyTemplateMode(form, tpl);
 }
+
+// ---------- Windows updates --------------------------------------------------
+const UPDATE_STEPS = {
+  starting: 'Starting…', searching: 'Searching for updates…', downloading: 'Downloading updates…',
+  installing: 'Installing updates…', restarting: 'Restarting to finish the updates…',
+  'restart-required': 'Restart required', done: 'Finished', failed: 'Failed',
+};
+const ACTIVE_UPDATE = ['starting', 'searching', 'downloading', 'installing', 'restarting', 'restart-required'];
+
+function updateList(items) {
+  if (!items?.length) return '';
+  return `<ul class="update-list">${items.map((u) => `<li><span class="mono">${esc(u.kb || '')}</span> ${esc(u.title)}</li>`).join('')}</ul>`;
+}
+
+async function renderUpdates(body) {
+  const vmid = state.selected;
+  if (!body.querySelector('.updates')) body.innerHTML = '<p class="muted">Checking…</p>';
+  let info;
+  try { info = await api(`/api/vms/${vmid}/updates`); } catch (err) { body.innerHTML = ''; return fail(err); }
+  if (vmid !== state.selected || state.tab !== 'updates' || state.view !== 'server') return;
+  const vm = state.detail;
+  const r = info.run;
+  clearTimeout(state.updTimer);
+
+  if (!info.available) {
+    body.innerHTML = `<div class="updates"><p class="muted">${info.enabled
+      ? 'Updates through the panel are available for Windows servers.'
+      : 'Installing Windows updates through the panel is switched off by your provider.'}</p></div>`;
+    return;
+  }
+
+  if (r && ACTIVE_UPDATE.includes(r.state)) {
+    const pct = r.total ? Math.round((r.current / r.total) * 100) : 0;
+    const counting = ['downloading', 'installing'].includes(r.state) && r.total;
+    body.innerHTML = `
+      <div class="updates">
+        <p class="progress-step">${r.state === 'restart-required' ? icon('restart') : '<span class="spinner" aria-hidden="true"></span>'}
+          ${esc(UPDATE_STEPS[r.state])}${r.round > 1 && ['searching', 'downloading', 'installing'].includes(r.state) ? ` <span class="muted">(round ${esc(r.round)})</span>` : ''}</p>
+        ${counting ? `<div class="bar update-bar" role="progressbar" aria-valuenow="${pct}" aria-valuemin="0" aria-valuemax="100"><span style="width:${pct}%"></span></div>
+          <p class="muted small">${esc(r.message ?? '')}</p>` : r.message && r.state !== 'restart-required' ? `<p class="muted small">${esc(r.message)}</p>` : ''}
+        ${r.state === 'restart-required' ? `
+          <div class="notice warn update-restart">
+            <p>Windows needs a restart to finish installing. The panel continues automatically after the restart.</p>
+            <button class="btn" data-power="reboot">${icon('restart')}<span>Restart now</span></button>
+          </div>` : `<p class="muted small">This can take 30 minutes or more. You can leave this page; the updates continue${r.autoRestart ? ', and the server restarts by itself when needed' : ''}.</p>`}
+        ${r.installed?.length ? `<details class="update-details"><summary>Installed so far (${r.installed.length})</summary>${updateList(r.installed)}</details>` : ''}
+      </div>`;
+    state.updTimer = setTimeout(() => { if (state.tab === 'updates') renderUpdates($('#tab-body')); }, 4000);
+    return;
+  }
+
+  const last = r ? `
+    <div class="notice ${r.state === 'failed' ? 'warn' : ''} update-last">
+      <p><strong>Last run ${esc(new Date(`${(r.finishedAt || r.startedAt).replace(' ', 'T')}Z`).toLocaleString())}:</strong>
+        ${r.state === 'failed' ? esc(r.error || 'Windows Update failed.')
+          : r.installed.length ? `${r.installed.length} update${r.installed.length === 1 ? '' : 's'} installed.` : 'Windows was already up to date.'}
+        ${r.failed?.length ? ` ${r.failed.length} could not be installed.` : ''}
+        ${r.snapshot ? ` Snapshot before updating: <span class="mono">${esc(r.snapshot)}</span>.` : ''}</p>
+      ${r.installed.length || r.failed?.length ? `<details class="update-details"><summary>Details</summary>${updateList(r.installed)}${r.failed?.length ? `<p class="small warn-text">Not installed:</p>${updateList(r.failed)}` : ''}</details>` : ''}
+    </div>` : '';
+  const running = vm.status === 'running';
+  body.innerHTML = `
+    <div class="updates">
+      <h2 class="h2">Windows updates</h2>
+      <p class="muted updates-lede">Install the latest updates from Microsoft. Feature upgrades to a new Windows version and preview updates are never installed.</p>
+      ${last}
+      ${running ? '' : '<div class="notice warn"><p>Start the server to install updates.</p></div>'}
+      <form id="update-form" class="update-form">
+        <div class="choices" role="radiogroup" aria-label="Which updates">
+          <label class="choice"><input type="radio" name="scope" value="security" checked>
+            <span><strong>Security and critical updates</strong><span class="muted">Recommended. Includes the monthly cumulative update and Defender updates.</span></span></label>
+          <label class="choice"><input type="radio" name="scope" value="all">
+            <span><strong>All quality updates</strong><span class="muted">Also optional updates such as .NET improvements.</span></span></label>
+        </div>
+        <label class="check"><input type="checkbox" name="snapshot" checked>
+          <span>Take a snapshot first <span class="muted">If an update causes problems, roll back to it under Snapshots.</span></span></label>
+        <label class="check"><input type="checkbox" name="autoRestart" checked>
+          <span>Restart automatically when needed <span class="muted">Otherwise the panel asks you to restart, and continues afterwards.</span></span></label>
+        <div class="row">
+          <button class="btn primary" ${running ? '' : 'disabled'}>${icon('download')}<span>Install updates</span></button>
+        </div>
+      </form>
+    </div>`;
+}
+
+$('#detail').addEventListener('submit', async (e) => {
+  if (e.target.id !== 'update-form') return;
+  e.preventDefault();
+  const f = e.target;
+  const b = f.querySelector('.btn.primary');
+  b.disabled = true;
+  try {
+    await api(`/api/vms/${state.selected}/updates`, {
+      method: 'POST',
+      body: { scope: f.scope.value, snapshot: f.snapshot.checked, autoRestart: f.autoRestart.checked },
+    });
+    toast('Installing Windows updates');
+    renderUpdates($('#tab-body'));
+  } catch (err) { fail(err); b.disabled = false; }
+});
 
 // ---------- expiry -----------------------------------------------------------
 const fmtDay = (iso) => new Date(iso).toLocaleDateString(undefined, { day: 'numeric', month: 'long', year: 'numeric' });

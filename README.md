@@ -113,6 +113,7 @@ PVE Panel was built with substantial help from an AI assistant (**Claude by Anth
 - Create new servers from administrator-approved templates
 - Reinstall self-created servers from a template (same name, size and network address)
 - Resize self-created servers within their plan (CPU, memory, disk)
+- Install Windows updates with one click (optional snapshot first, automatic restarts)
 - Delete self-created servers
 - View provisioning progress and actionable failure messages
 - Manage personal VPN devices
@@ -728,6 +729,21 @@ The customer list shows *Invitation pending* or *Invitation expired* until the u
 
 ---
 
+## 🪟 Windows updates
+
+Customers install the latest Windows updates from the server page — **Updates** tab:
+
+- security and critical updates (default), or all quality updates — never feature upgrades or previews
+- optional **snapshot first**, so a bad update can be rolled back
+- restarts automatically when needed (or waits for *Restart now*) and continues until Windows is up to date
+- live progress and a list of installed updates; failures explained in plain words
+
+Runs through the QEMU guest agent and Windows' own update API; respects WSUS/group policy. Switch it off under **Settings → Windows updates**.
+
+Details: [Windows updates](https://sebastianflint.github.io/pve-panel/docs/features/windows-updates).
+
+---
+
 ## ⏳ Server expiry
 
 Opt-in end dates for **single customers or servers** — trials, test servers, courses:
@@ -1099,6 +1115,7 @@ Only these file names are served, with a strict sandbox policy. Make sure you're
 │   ├── passkeys.js
 │   ├── expiry.js
 │   ├── appearance.js
+│   ├── winupdate.js
 │   ├── oidc.js
 │   ├── vpn.js
 │   ├── agent.js
@@ -1169,6 +1186,7 @@ Only these file names are served, with a strict sandbox policy. Make sure you're
 | `POST` | `/api/vms/:vmid/reinstall` | Reinstall a self-created server from a template |
 | `POST` | `/api/vms/:vmid/resize` | Change CPU cores, memory and disk within the plan |
 | `POST` | `/api/vms/:vmid/extend` | Extend an expiring server (once, if allowed) |
+| `GET/POST` | `/api/vms/:vmid/updates` | Windows updates: status / start |
 | `DELETE` | `/api/vms/:vmid` | Delete a self-created server |
 | `GET` | `/api/vpn` | VPN state |
 | `POST` | `/api/vpn/devices` | Add VPN device |
@@ -1273,6 +1291,7 @@ Every change is tested on GitHub; releases are only published when all tests pas
 | Unit | 2FA (RFC 6238 vectors), secret encryption, SSO account rules, guest agent handling |
 | Passkeys | registration and sign-in with a software authenticator; phishing origin, missing user verification, forged signature, replayed counter |
 | Expiry | rules, reminders, stop, self-extension, grace period, deletion, and the safety rules |
+| Windows updates | checks, snapshot, progress, restarts in between, waiting for a restart, error messages, background tracking |
 | API | the real panel against a simulated Proxmox: sign-in & 2FA, ownership, provisioning, networks, plan limits, reinstall, resize, email & invitations, VPN, Tailscale, customer deletion |
 | Browser | Playwright: sign-in, overview, server page, creating a server, admin views |
 

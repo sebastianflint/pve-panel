@@ -79,6 +79,52 @@ export async function startMockPve({ port = 0 } = {}) {
     }
     return null;
   }
+
+  // ---- Simulated Windows Update (PVE Panel's update task) ----------------------------
+  // vm.wuScenario: 'normal' (round 1: 3 updates + restart, round 2: 1 update, then
+  // up to date), 'uptodate', 'error' (update server unreachable), 'lowdisk', 'disabled'
+  const WU_ROUNDS = [
+    [{ kb: 'KB5044284', title: '2026-10 Cumulative Update for Microsoft server operating system (KB5044284)', reboot: true },
+     { kb: 'KB5044029', title: '2026-10 Cumulative Update for .NET Framework (KB5044029)', reboot: false },
+     { kb: 'KB2267602', title: 'Security Intelligence Update for Microsoft Defender Antivirus (KB2267602)', reboot: false }],
+    [{ kb: 'KB5044099', title: '2026-10 Servicing Stack Update (KB5044099)', reboot: false }],
+  ];
+  const WU_STEP = 300;
+  function wuStatus(vm, vmid) {
+    const w = vm.wu; const now = Date.now();
+    const rounds = w.scenario === 'uptodate' ? [] : WU_ROUNDS;
+    for (let guard = 0; guard < 50; guard += 1) {
+      const t = now - w.stageAt;
+      if (w.stage === 'searching') {
+        if (t < WU_STEP) break;
+        if (w.scenario === 'error') { w.state = 'failed'; w.error = 'Exception from HRESULT: 0x8024402C (0x8024402C)'; w.stage = 'final'; break; }
+        const list = rounds[w.round - 1] ?? [];
+        if (!list.length) { w.state = 'done'; w.message = 'Windows is up to date'; w.stage = 'final'; break; }
+        w.list = list; w.stage = 'downloading'; w.stageAt += WU_STEP; continue;
+      }
+      if (w.stage === 'downloading' || w.stage === 'installing') {
+        const span = w.list.length * WU_STEP;
+        w.current = Math.min(w.list.length, Math.floor(t / WU_STEP) + 1);
+        if (t < span) break;
+        if (w.stage === 'downloading') { w.stage = 'installing'; w.stageAt += span; continue; }
+        w.installed.push(...w.list.map(({ kb, title }) => ({ kb, title, code: 2, hresult: '0x00000000' })));
+        const reboot = w.list.some((u) => u.reboot);
+        w.round += 1; w.stageAt += span;
+        if (reboot && w.config.autoRestart) { w.stage = 'restarting'; started.set(vmid, now); log('WU restart', vmid); continue; }
+        if (reboot) { w.stage = 'restart-required'; break; }
+        w.stage = 'searching'; continue;
+      }
+      if (w.stage === 'restarting') { if (t < 1500) break; w.stage = 'searching'; w.stageAt += 1500; continue; }
+      break; // restart-required (waits for a power restart) or final
+    }
+    const state = w.stage === 'final' ? w.state : w.stage;
+    const msg = { searching: `Searching for updates (round ${w.round})`, downloading: `Downloading ${w.current} of ${w.list?.length}`,
+      installing: `Installing ${w.current} of ${w.list?.length}`, restarting: 'Restarting to finish the updates',
+      'restart-required': 'Restart the server to finish the updates' }[state] ?? w.message ?? '';
+    // PowerShell 5.1 writes a BOM: the panel must cope with it
+    return '\uFEFF' + JSON.stringify({ runId: w.config.runId, state, round: w.round, total: w.list?.length ?? 0, current: w.current ?? 0,
+      installed: w.installed, failed: [], message: msg, error: w.error ?? null, updatedAt: new Date().toISOString() });
+  }
   const srv = http.createServer(async (req, res) => {
     const u = new URL(req.url, 'http://x'); const p = u.pathname.replace('/api2/json','');
     if (req.headers.authorization !== 'PVEAPIToken=panel@pve!panel=x') return send(res, null, 401);
@@ -87,7 +133,8 @@ export async function startMockPve({ port = 0 } = {}) {
     if (p === '/__sdn') return send(res, { ...sdn, subnets: Object.fromEntries(sdn.subnets) });
     if (p.startsWith('/__tsowner/')) { vms.get(Number(p.split('/')[2])).tsForeign = true; return send(res, 'ok'); }
     if (p.startsWith('/__lose/')) { const [, , v, n, only] = p.split('/'); lose.set(Number(v), Number(n)); loseOnly.set(Number(v), only ? decodeURIComponent(only) : null); return send(res, 'ok'); }
-    if (p.startsWith('/__recovery/')) { vms.get(Number(p.split('/')[2])).recoveryAfterC = true; return send(res, 'ok'); }
+    if (p.startsWith('/__wu/')) { const [, , v, scen] = p.split('/'); vms.get(Number(v)).wuScenario = scen; return send(res, 'ok'); }
+  if (p.startsWith('/__recovery/')) { vms.get(Number(p.split('/')[2])).recoveryAfterC = true; return send(res, 'ok'); }
     if (p.startsWith('/__flaky/')) { const [, , v, n] = p.split('/'); flaky.set(Number(v), Number(n)); return send(res, 'ok'); }
     if (p.startsWith('/__tsapprove/')) { tsApproved.add(Number(p.split('/')[2])); return send(res, 'approved'); }
     if (p === '/__vms') return send(res, [...vms.keys()]);
@@ -136,6 +183,7 @@ export async function startMockPve({ port = 0 } = {}) {
     const pw = rest.match(/^\/status\/(start|stop|shutdown|reboot)$/);
     if (pw) { const a = pw[1]; log('POWER', vmid, a); return send(res, task(`qm${a}`, vmid, 800, () => {
       vm.status = (a==='start'||a==='reboot')?'running':'stopped'; if (a==='start'||a==='reboot') started.set(vmid, Date.now());
+      if ((a==='start'||a==='reboot') && vm.wu?.stage === 'restart-required') { vm.wu.stage = 'restarting'; vm.wu.stageAt = Date.now(); }
       if (vm.pending) { vm.maxcpu = Number(vm.cfg.cores); vm.maxmem = Number(vm.cfg.memory)*2**20; delete vm.pending; log('PENDING applied', vmid); } })); }
     if (rest === '/status/current') return send(res, { status: vm.status, cpus: vm.maxcpu, uptime: 600, mem: vm.maxmem/4, maxmem: vm.maxmem, agent: 0 });
     if (rest.startsWith('/firewall')) { const b = req.method==='GET'||req.method==='DELETE' ? Object.fromEntries(u.searchParams) : await body(req);
@@ -152,6 +200,25 @@ export async function startMockPve({ port = 0 } = {}) {
       if (cmd[0] === '/bin/bash' && vmid !== 150) {
         const t = tailscaleExec(vm, vmid, cmd[2], stdin) ?? { out: '', code: 1, err: 'unknown command' };
         const pid = ++pidSeq; execs.set(String(pid), { out: t.out, at: Date.now(), code: t.code, err: t.err, script: cmd[2] }); return send(res, { pid });
+      }
+      if (decoded && /PVEPANEL-WU-/.test(decoded)) {
+        let out = '';
+        const scen = vm.wuScenario ?? 'normal';
+        if (/PVEPANEL-WU-PRECHECK/.test(decoded)) {
+          out = JSON.stringify({ freeGb: scen === 'lowdisk' ? 4.2 : 38.5, wuStartMode: scen === 'disabled' ? 'Disabled' : 'Manual', running: false });
+        } else if (/PVEPANEL-WU-SETUP/.test(decoded)) {
+          const input = JSON.parse(stdin);
+          if (!/Microsoft\.Update\.Session/.test(input.script)) { const pid = ++pidSeq; execs.set(String(pid), { out: '', at: Date.now(), code: 1, err: 'bad script' }); return send(res, { pid }); }
+          vm.wuConfig = input.config;
+          vm.wu = { config: input.config, scenario: scen, stage: 'searching', stageAt: Date.now(), round: 1, installed: [] };
+          log('WU started', vmid, JSON.stringify(input.config));
+          out = 'started\n';
+        } else if (/PVEPANEL-WU-STATUS/.test(decoded)) {
+          out = vm.wu ? wuStatus(vm, vmid) : '{}';
+        } else if (/PVEPANEL-WU-CLEANUP/.test(decoded)) {
+          vm.wuCleaned = true; out = 'ok\n';
+        }
+        const pid = ++pidSeq; execs.set(String(pid), { out, at: Date.now(), code: 0, err: '' }); return send(res, { pid });
       }
       if (decoded && /Resize-Partition/.test(decoded)) {
         const blocked = vm.recoveryAfterC; const pid = ++pidSeq;
