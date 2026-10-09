@@ -45,7 +45,7 @@ jobs:
 
     steps:
       - name: Check out
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       # Registry names must be lowercase (GitHub user/repo names may not be)
       - name: Image name
