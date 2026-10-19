@@ -1,17 +1,26 @@
+import { poolOfUser, datacentersFor } from '../pools.js';
+import { profilesForUser, gpusOfServer } from '../gpu.js';
+import { s3Enabled } from '../seaweedfs.js';
 import { db, audit } from '../db.js';
 import { config } from '../config.js';
 import {
-  pve, clusterGuests, locateGuest, guestPath, invalidateGuestCache, bootDiskKey, diskSizeGb,
+  pve, clusterGuests, locateGuest, guestPath, invalidateGuestCache, bootDiskKey, diskSizeGb, waitTask,
 } from '../pve.js';
 import {
   limitsOf, usageOf, offeredTemplates, createServer, deleteServer, reinstallServer, resizeServer,
 } from '../provision.js';
 import { networkOf } from '../network.js';
+import { getSchedule, setSchedule, syncAfterRollback } from '../snapschedule.js';
 import { vpnInfoFor } from '../vpn.js';
 import { tailscaleStatus, connectTailscale, disconnectTailscale } from '../tailscale.js';
 import { versionInfo } from '../version.js';
 import { expiryInfo, expirySettings, customerExtend } from '../expiry.js';
 import { updateInfo, startUpdates, refreshForServer } from '../winupdate.js';
+import { planSettings, plansFor, planRow, getPlan, isUpgrade } from '../plans.js';
+import {
+  planIsBilled, orderQuote, chargeOrder, completeOrder, refundInvoice, upgradeQuote, chargeUpgrade,
+  billingEnabled, balanceOf, MONTH_OPTIONS, voidOpenRenewals,
+} from '../billing.js';
 
 const ownedByUser = db.prepare('SELECT * FROM vms WHERE vmid = ? AND user_id = ?');
 const listForUser = db.prepare('SELECT * FROM vms WHERE user_id = ? ORDER BY vmid');
@@ -104,6 +113,7 @@ function summarize(row, guest) {
     deletable: !!row.created_by_customer,
     reinstallable: !!row.created_by_customer,
     expiry: expiryInfo(row, expirySettings()),
+    plan: row.plan_id ? (({ id, name }) => ({ id, name }))(getPlan(row.plan_id) ?? { id: row.plan_id, name: 'plan' }) : null,
     name: row.label || guest?.name || (row.spec && JSON.parse(row.spec).hostname) || `Server ${row.vmid}`,
     hostname: guest?.name ?? null,
     status: guest?.status ?? 'unknown',
@@ -162,10 +172,15 @@ export default async function vmRoutes(app) {
     // Version number only; commit, build date and update status stay admin-only.
     const panelVersion = config.showVersionToCustomers ? versionInfo.version : null;
     if (!a.can_create) return { canCreate: false, network, vpn, tailscale, panelVersion };
+    const pool = poolOfUser(a.id);
     return {
       canCreate: true,
       limits: limitsOf(a),
       usage: await usageOf(a.id),
+      // Where servers can go and which GPUs can be added (from the resource pool)
+      datacenters: datacentersFor(a.id).map(({ id, name, location }) => ({ id, name, location })),
+      gpuProfiles: profilesForUser(a.id).map(({ id, name, mode, vramGb }) => ({ id, name, mode, vramGb })),
+      pool: pool ? { name: pool.name, objectStorage: pool.maxS3Buckets > 0 && s3Enabled() } : null,
       network,
       networksEnabled: config.network.enabled,
       vpn,
@@ -179,12 +194,35 @@ export default async function vmRoutes(app) {
     return offeredTemplates();
   });
 
+  // Plans this customer can create servers from, with prices when billing is on
+  app.get('/api/plans', async (req, reply) => {
+    if (!req.account.can_create) return reply.code(403).send({ error: 'Creating servers is not enabled for your account' });
+    const gpuIds = profilesForUser(req.account.id).map((p) => p.id);
+    const billed = billingEnabled();
+    return {
+      requirePlan: planSettings().requirePlan,
+      billing: billed ? { enabled: true, balance: balanceOf(req.account.id) } : { enabled: false },
+      plans: plansFor(gpuIds).map((p) => {
+        const row = planRow(p.id);
+        return {
+          ...p,
+          billed: planIsBilled(row),
+          // total incl. tax for each period (the invoice shows the lines)
+          prices: planIsBilled(row) ? Object.fromEntries(MONTH_OPTIONS.map((m) => {
+            const q = orderQuote(row, m);
+            return [m, { total: q.total, tax: q.tax, subtotal: q.subtotal, discount: q.lines[1] ? -q.lines[1].amount : 0 }];
+          })) : null,
+        };
+      }),
+    };
+  });
+
   app.post('/api/vms', {
     config: { rateLimit: { max: 15, timeWindow: '10 minutes' } },
     schema: {
       body: {
         type: 'object',
-        required: ['hostname', 'templateId', 'cores', 'memoryMb', 'diskGb'],
+        required: ['hostname', 'templateId'],
         additionalProperties: false,
         properties: {
           hostname: { type: 'string', pattern: '^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$' },
@@ -195,14 +233,88 @@ export default async function vmRoutes(app) {
           username: { type: 'string', pattern: '^[a-z_][a-z0-9_-]{0,31}$' },
           password: { type: 'string', minLength: 12, maxLength: 200 },
           sshKeys: { type: 'string', maxLength: 16000 },
+          datacenterId: { type: 'integer', minimum: 1 },
+          gpuProfileId: { type: 'integer', minimum: 1 },
+          planId: { type: 'integer', minimum: 1 },
+          months: { type: 'integer', enum: [1, 3, 6, 12] },
         },
       },
     },
   }, async (req, reply) => {
-    const spec = { ...req.body };
+    const { months, ...spec } = req.body;
     if (badSshKeys(spec.sshKeys)) return reply.code(400).send({ error: SSH_KEY_ERROR });
-    const vmid = await createServer(req, spec);
+    let charge = null;
+    if (spec.planId) {
+      // The plan decides the size (and the GPU); what else was sent for the size is ignored
+      const plan = planRow(spec.planId);
+      const offered = plan?.active && plansFor(profilesForUser(req.account.id).map((p) => p.id)).some((p) => p.id === plan.id);
+      if (!offered) return reply.code(400).send({ error: 'That plan is not available' });
+      Object.assign(spec, { cores: plan.cores, memoryMb: plan.memory_mb, diskGb: plan.disk_gb, gpuProfileId: plan.gpu_profile_id ?? undefined });
+      if (!spec.gpuProfileId) delete spec.gpuProfileId;
+      if (planIsBilled(plan)) {
+        const period = months ?? 1;
+        charge = () => {
+          const inv = chargeOrder(req, plan, period);
+          return { done: (vmid) => completeOrder(inv.id, vmid, period), undo: (why) => refundInvoice(inv.id, why) };
+        };
+      }
+    } else {
+      if (planSettings().requirePlan) return reply.code(400).send({ error: 'Choose a plan' });
+      if (!spec.cores || !spec.memoryMb || !spec.diskGb) return reply.code(400).send({ error: 'Give the size: cores, memoryMb and diskGb' });
+    }
+    const vmid = await createServer(req, spec, { charge });
     return reply.code(202).send({ vmid });
+  });
+
+  // Larger plans this server can move to, with what the move costs now
+  app.get('/api/vms/:vmid/plans', async (req) => {
+    const vmid = Number(req.params.vmid);
+    const row = Number.isInteger(vmid) ? ownedByUser.get(vmid, req.account.id) : null;
+    if (!row) throw notFound();
+    const current = row.plan_id ? getPlan(row.plan_id) : null;
+    if (!current) return { current: null, options: [] };
+    const gpuIds = profilesForUser(req.account.id).map((p) => p.id);
+    const options = plansFor([...gpuIds, current.gpuProfileId].filter(Boolean)).filter((p) => isUpgrade(current, p)).map((p) => {
+      const q = upgradeQuote(vmid, planRow(current.id), planRow(p.id));
+      return { ...p, cost: { total: q.total, tax: q.tax, days: q.days, perMonth: q.perMonth } };
+    });
+    return { current, options, balance: billingEnabled() ? balanceOf(req.account.id) : null };
+  });
+
+  // Move to a larger plan: pay the difference for the rest of the period, then resize
+  app.post('/api/vms/:vmid/plan', {
+    config: { rateLimit: { max: 10, timeWindow: '1 hour' } },
+    schema: {
+      body: {
+        type: 'object', required: ['planId'], additionalProperties: false,
+        properties: { planId: { type: 'integer', minimum: 1 }, restart: { type: 'boolean' } },
+      },
+    },
+  }, async (req) => {
+    const vmid = Number(req.params.vmid);
+    const row = Number.isInteger(vmid) ? ownedByUser.get(vmid, req.account.id) : null;
+    if (!row) throw notFound();
+    const from = row.plan_id ? planRow(row.plan_id) : null;
+    if (!from) throw Object.assign(new Error('This server is not on a plan'), { statusCode: 400, expose: true });
+    const gpuIds = profilesForUser(req.account.id).map((p) => p.id);
+    const target = plansFor([...gpuIds, from.gpu_profile_id].filter(Boolean)).find((p) => p.id === req.body.planId);
+    if (!target || !isUpgrade(getPlan(from.id), target)) {
+      throw Object.assign(new Error('Choose a larger plan with the same GPU'), { statusCode: 400, expose: true });
+    }
+    const to = planRow(target.id);
+    if (row.expired_at) throw Object.assign(new Error('This server has expired. Renew it first.'), { statusCode: 403, expose: true });
+    const inv = chargeUpgrade(req, vmid, from, to);
+    let result;
+    try {
+      result = await resizeServer(req, row, { cores: to.cores, memoryMb: to.memory_mb, diskGb: to.disk_gb, restart: !!req.body.restart }, { planChange: true });
+    } catch (err) {
+      if (inv) refundInvoice(inv.id, 'the upgrade could not be applied');
+      throw err;
+    }
+    db.prepare('UPDATE vms SET plan_id = ? WHERE vmid = ?').run(to.id, vmid);
+    voidOpenRenewals(vmid, `Replaced: the server moved to plan ${to.name}`);
+    audit(req, vmid, 'server_plan_changed', { from: from.name, to: to.name, invoice: inv?.number ?? null });
+    return { ...result, plan: { id: to.id, name: to.name }, invoice: inv?.number ?? null };
   });
 
   // Reinstall: fresh copy of an image, same ID, name, size and network address
@@ -368,7 +480,9 @@ export default async function vmRoutes(app) {
       ipconfig: cfg.ipconfig0 ?? cfg.net0 ?? null,
       ips,
       pendingSize,
-      resizable: !!row.created_by_customer,
+      resizable: !!row.created_by_customer && !row.plan_id,
+      upgradable: !!row.created_by_customer && !!row.plan_id,
+      gpus: gpusOfServer(row.vmid).map(({ slot, name, mode, vramGb }) => ({ slot, name, mode, vramGb })),
       netin: status.netin ?? 0,
       netout: status.netout ?? 0,
     };
@@ -387,6 +501,8 @@ export default async function vmRoutes(app) {
       return reply.code(403).send({ error: 'This server has expired. Extend it to use it again.' });
     }
     const upid = await pve.post(`${path}/status/${action}`);
+    // Proxmox rebuilds the cloud-init drive on start and reboot: public addresses become active
+    if (['start', 'reboot'].includes(action)) db.prepare("UPDATE ip_addresses SET apply = 'live' WHERE vmid = ? AND apply = 'restart'").run(row.vmid);
     return recordTask(req, guest, upid, `power_${action}`);
   });
 
@@ -421,6 +537,7 @@ export default async function vmRoutes(app) {
         description: s.description ?? '',
         time: s.snaptime ?? null,
         includesRam: !!s.vmstate,
+        auto: /^auto_\d{14}$/.test(s.name),
       }))
       .sort((a, b) => (b.time ?? 0) - (a.time ?? 0));
   });
@@ -472,7 +589,28 @@ export default async function vmRoutes(app) {
     const { guest, path } = await ownedGuest(req);
     if (!SNAPSHOT_NAME.test(req.params.name)) return reply.code(400).send({ error: 'Invalid snapshot name' });
     const upid = await pve.post(`${path}/snapshot/${req.params.name}/rollback`);
+    // the restored configuration may differ in volumes and network cards: bring the panel in line
+    waitTask(guest.node, upid).then(() => syncAfterRollback(guest.vmid))
+      .catch((err) => req.log.warn(`After rollback of ${guest.vmid}: ${err.message}`));
     return recordTask(req, guest, upid, 'snapshot_rollback');
+  });
+
+  // Automatic snapshots (daily / weekly, keep N)
+  app.get('/api/vms/:vmid/snapshot-schedule', async (req) => {
+    await ownedGuest(req);
+    return getSchedule(Number(req.params.vmid));
+  });
+  app.put('/api/vms/:vmid/snapshot-schedule', {
+    schema: {
+      body: {
+        type: 'object', required: ['frequency'], additionalProperties: false,
+        properties: { frequency: { type: 'string', enum: ['off', 'daily', 'weekly'] }, hour: { type: 'integer' }, weekday: { type: 'integer' }, keep: { type: 'integer' } },
+      },
+    },
+  }, async (req) => {
+    await ownedGuest(req);
+    const row = ownedByUser.get(Number(req.params.vmid), req.account.id);
+    return setSchedule(req, row, req.body);
   });
 
   app.delete('/api/vms/:vmid/snapshots/:name', async (req, reply) => {

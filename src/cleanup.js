@@ -2,9 +2,10 @@
 
 import { db, audit } from './db.js';
 import { config } from './config.js';
-import { pve, clusterGuests, guestPath, waitTask, invalidateGuestCache } from './pve.js';
+import { pve, clusterGuests, guestPath, waitTask, invalidateGuestCache, guestMayBeHidden, HiddenGuestError } from './pve.js';
 import { removeNetwork, guestsUsingVnet } from './network.js';
 import { syncGateway } from './vpn.js';
+import { removeCustomer as removeS3Customer } from './seaweedfs.js';
 
 export class CleanupError extends Error {
   constructor(status, message) {
@@ -26,6 +27,7 @@ export function isProtected(vmid, guest) {
 export async function destroyServer(actor, vmid) {
   const guest = (await clusterGuests(true)).get(vmid);
   if (isProtected(vmid, guest)) throw new CleanupError(403, `Server ${vmid} is protected and can't be deleted here`);
+  if (!guest && guestMayBeHidden()) throw new HiddenGuestError();
 
   if (guest) {
     const path = guestPath(guest);
@@ -102,6 +104,9 @@ export function startCustomerDeletion(req, userId, { keepAssigned = false, keepN
       if (config.network.enabled && !keepNetwork) await removeNetwork(userId);
       // With keepNetwork the VNet stays in Proxmox; its row stays too (without an
       // owner) so its address range isn't handed to another customer.
+
+      // Object storage: access key, policy and IAM user go; buckets stay (no owner)
+      await removeS3Customer(userId);
 
       db.prepare('DELETE FROM users WHERE id = ?').run(userId);
       audit(actor, null, 'admin_user_delete', { email: user.email });

@@ -3,8 +3,11 @@ import { db, audit } from '../db.js';
 import { pve, clusterGuests, locateGuest, locateTemplate, invalidateGuestCache, guestPath } from '../pve.js';
 import { startCustomerDeletion, deletionPlan, destroyServer, isProtected } from '../cleanup.js';
 import { tailscaleOverview } from '../tailscale.js';
-import { SCHEMES, currentScheme, setScheme } from '../appearance.js';
-import { updatesEnabled, setUpdatesEnabled } from '../winupdate.js';
+import { SCHEMES, currentScheme, setScheme, personalAllowed, setAllowPersonal } from '../appearance.js';
+import { updatesEnabled, linuxUpdatesEnabled, setUpdatesEnabled } from '../winupdate.js';
+import * as sso from '../sso.js';
+import { branding, saveBranding, saveAsset, removeAsset } from '../branding.js';
+import { activity, ACTOR_KEYS, CATEGORY_KEYS } from '../activity.js';
 import * as totp from '../totp.js';
 import { deleteAllPasskeys } from '../passkeys.js';
 import {
@@ -19,6 +22,19 @@ import { usageOf } from '../provision.js';
 import { networkOf, allNetworks } from '../network.js';
 import { adminOverview, removeDevice, syncGateway } from '../vpn.js';
 import { config } from '../config.js';
+import {
+  enforceRoutePermission, requirePermission, roleOf, permissionsOf, roleByKey, roleById, assertOwnerRemains,
+} from '../rbac.js';
+import adminInfraRoutes from './admin-infra.js';
+import adminSupportRoutes from './admin-support.js';
+import adminBillingRoutes from './admin-billing.js';
+import adminVolumeRoutes from './admin-volumes.js';
+import adminIpamRoutes from './admin-ipam.js';
+import adminHostRoutes from './admin-hosts.js';
+import { adminTokenRoutes } from './tokens.js';
+import adminJobRoutes from './admin-jobs.js';
+import adminClusterRoutes from './admin-clusters.js';
+import adminPlanRoutes from './admin-plans.js';
 
 const PASSWORD = { type: 'string', minLength: 12, maxLength: 200 };
 
@@ -28,6 +44,29 @@ function badRequest(reply, error) {
 
 export default async function adminRoutes(app) {
   app.addHook('preHandler', app.requireAdmin);
+  // Role-based access: every route needs the permission rbac.js maps it to.
+  app.addHook('preHandler', enforceRoutePermission);
+
+  // Who am I in the administration: role and permissions (drives which tabs show)
+  app.get('/api/admin/me', async (req) => {
+    const role = roleOf(req.account);
+    return {
+      id: req.account.id, email: req.account.email,
+      role: { id: role.id, key: role.key, name: role.name },
+      permissions: [...permissionsOf(req.account)],
+    };
+  });
+
+  await app.register(adminInfraRoutes);
+  await app.register(adminSupportRoutes);
+  await app.register(adminBillingRoutes);
+  await app.register(adminVolumeRoutes);
+  await app.register(adminIpamRoutes);
+  await app.register(adminHostRoutes);
+  await app.register(adminTokenRoutes);
+  await app.register(adminJobRoutes);
+  await app.register(adminClusterRoutes);
+  await app.register(adminPlanRoutes);
 
   // ---- Users ------------------------------------------------------------
 
@@ -38,11 +77,14 @@ export default async function adminRoutes(app) {
              u.max_memory_mb AS maxMemoryMb, u.max_disk_gb AS maxDiskGb,
              u.deleting, u.deletion_error AS deletionError,
              u.totp_enabled AS totpEnabled, u.totp_required AS totpRequired,
-             u.oidc_issuer AS ssoIssuer, u.oidc_subject IS NOT NULL AS ssoLinked,
+             u.oidc_issuer AS ssoIssuer,
+             (u.oidc_subject IS NOT NULL OR EXISTS (SELECT 1 FROM user_identities i WHERE i.user_id = u.id)) AS ssoLinked,
+             (SELECT group_concat(i.provider, ',') FROM user_identities i WHERE i.user_id = u.id) AS ssoProviders,
              (SELECT COUNT(*) FROM passkeys p WHERE p.user_id = u.id) AS passkeyCount,
              u.expiry_mode AS expiryMode, u.expiry_days AS expiryDays, u.expiry_date AS expiryDate,
              u.expiry_self_extend AS expirySelfExtend,
              u.password_set, u.invite_token_hash, u.invite_expires, u.invited_at,
+             u.admin_role_id AS adminRoleId, u.resource_pool_id AS resourcePoolId,
              COUNT(v.vmid) AS servers
       FROM users u LEFT JOIN vms v ON v.user_id = u.id
       GROUP BY u.id ORDER BY u.email
@@ -50,6 +92,8 @@ export default async function adminRoutes(app) {
     return Promise.all(users.map(async (u) => ({
       ...u,
       isAdmin: !!u.isAdmin,
+      adminRole: u.isAdmin ? (roleById(u.adminRoleId) ?? roleByKey('owner')).key : null,
+      adminRoleId: undefined,
       canCreate: !!u.canCreate,
       deleting: !!u.deleting,
       totpEnabled: !!u.totpEnabled,
@@ -71,6 +115,7 @@ export default async function adminRoutes(app) {
           email: { type: 'string', format: 'email', maxLength: 254 },
           password: PASSWORD,
           isAdmin: { type: 'boolean' },
+          adminRole: { type: 'string', maxLength: 31 },
           requireTotp: { type: 'boolean' },
           invite: { type: 'boolean' },
         },
@@ -78,6 +123,14 @@ export default async function adminRoutes(app) {
     },
   }, async (req, reply) => {
     const { email, password, isAdmin = false, requireTotp = false, invite = false } = req.body;
+    // Only owners (rbac.write) make administrators. New administrators get the
+    // least powerful built-in role unless another one is chosen.
+    let role = null;
+    if (isAdmin) {
+      requirePermission(req.account, 'rbac.write');
+      role = roleByKey(req.body.adminRole ?? 'operator');
+      if (!role) return badRequest(reply, 'Unknown administrator role');
+    }
     const clean = email.trim();
     if (db.prepare('SELECT 1 FROM users WHERE email = ?').get(clean)) {
       return reply.code(409).send({ error: 'A user with this email already exists' });
@@ -90,10 +143,10 @@ export default async function adminRoutes(app) {
     // Invited users choose their own password through the link.
     const hash = invite ? unusablePassword() : await bcrypt.hash(password, 12);
     const { lastInsertRowid } = db.prepare(
-      'INSERT INTO users (email, password_hash, is_admin, totp_required, password_set) VALUES (?, ?, ?, ?, ?)',
-    ).run(clean, hash, isAdmin ? 1 : 0, requireTotp ? 1 : 0, invite ? 0 : 1);
+      'INSERT INTO users (email, password_hash, is_admin, totp_required, password_set, admin_role_id) VALUES (?, ?, ?, ?, ?, ?)',
+    ).run(clean, hash, isAdmin ? 1 : 0, requireTotp ? 1 : 0, invite ? 0 : 1, role?.id ?? null);
     const id = Number(lastInsertRowid);
-    audit(req, null, 'admin_user_create', { email: clean, isAdmin, requireTotp, invite });
+    audit(req, null, 'admin_user_create', { email: clean, isAdmin, role: role?.key, requireTotp, invite });
 
     let inviteError = null;
     if (invite) {
@@ -188,6 +241,12 @@ export default async function adminRoutes(app) {
     if (isAdmin === false && id === req.account.id) {
       return badRequest(reply, "You can't remove your own admin rights");
     }
+    if (typeof isAdmin === 'boolean' && isAdmin !== !!user.is_admin) {
+      requirePermission(req.account, 'rbac.write');
+      if (!isAdmin) assertOwnerRemains(id, { removingAdmin: true });
+    }
+    // Changing another administrator (password, 2FA, sign-in methods) is an RBAC matter too
+    if (user.is_admin && id !== req.account.id) requirePermission(req.account, 'rbac.write');
     if (password) {
       const hash = await bcrypt.hash(password, 12);
       db.prepare(`UPDATE users SET password_hash = ?, password_set = 1, invite_token_hash = NULL, invite_expires = NULL
@@ -195,7 +254,9 @@ export default async function adminRoutes(app) {
       audit(req, null, 'admin_password_reset', { email: user.email });
     }
     if (typeof isAdmin === 'boolean') {
-      db.prepare('UPDATE users SET is_admin = ? WHERE id = ?').run(isAdmin ? 1 : 0, id);
+      // Granted here: the least powerful built-in role (change it in Access)
+      db.prepare('UPDATE users SET is_admin = ?, admin_role_id = ? WHERE id = ?')
+        .run(isAdmin ? 1 : 0, isAdmin ? roleByKey('operator').id : null, id);
       audit(req, null, isAdmin ? 'admin_grant' : 'admin_revoke', { email: user.email });
     }
     if (typeof req.body.totpRequired === 'boolean') {
@@ -221,9 +282,11 @@ export default async function adminRoutes(app) {
       audit(req, null, 'admin_passkeys_removed', { email: user.email, count: n });
     }
     if (req.body.unlinkSso) {
-      // The next single sign-on links again by verified email (or is refused).
+      // Generic OIDC: the next sign-on links again by verified email (or is refused).
+      // Google/Microsoft/GitHub: the user links the provider again under Account.
       db.prepare('UPDATE users SET oidc_issuer = NULL, oidc_subject = NULL WHERE id = ?').run(id);
-      audit(req, null, 'admin_sso_unlink', { email: user.email });
+      const n = db.prepare('DELETE FROM user_identities WHERE user_id = ?').run(id).changes;
+      audit(req, null, 'admin_sso_unlink', { email: user.email, providers: n });
     }
     if (req.body.resetTotp) {
       // Lost phone and recovery codes: 2FA is removed; if required, the user
@@ -259,6 +322,11 @@ export default async function adminRoutes(app) {
   app.delete('/api/admin/users/:id', async (req, reply) => {
     const id = Number(req.params.id);
     if (id === req.account.id) return badRequest(reply, "You can't delete your own account");
+    const target = db.prepare('SELECT is_admin FROM users WHERE id = ?').get(id);
+    if (target?.is_admin) {
+      requirePermission(req.account, 'rbac.write');
+      assertOwnerRemains(id, { removingAdmin: true });
+    }
     startCustomerDeletion(req, id, {
       keepAssigned: req.query.keepAssigned === 'true',
       keepNetwork: req.query.keepNetwork === 'true',
@@ -364,24 +432,93 @@ export default async function adminRoutes(app) {
   });
 
   // ---- Settings: appearance (color scheme for everyone) -----------------------
-  app.get('/api/admin/settings/appearance', async () => ({ scheme: currentScheme(), schemes: SCHEMES }));
+  app.get('/api/admin/settings/appearance', async () => ({ scheme: currentScheme(), schemes: SCHEMES, allowPersonal: personalAllowed() }));
 
   app.put('/api/admin/settings/appearance', {
-    schema: { body: { type: 'object', required: ['scheme'], additionalProperties: false, properties: { scheme: { type: 'string', maxLength: 30 } } } },
+    schema: {
+      body: {
+        type: 'object', additionalProperties: false, minProperties: 1,
+        properties: { scheme: { type: 'string', maxLength: 30 }, allowPersonal: { type: 'boolean' } },
+      },
+    },
   }, async (req) => {
-    const scheme = setScheme(req.body.scheme);
-    audit(req, null, 'admin_appearance', { scheme });
-    return { scheme, schemes: SCHEMES };
+    if (req.body.scheme !== undefined) setScheme(req.body.scheme);
+    if (req.body.allowPersonal !== undefined) setAllowPersonal(req.body.allowPersonal);
+    audit(req, null, 'admin_appearance', req.body);
+    return { scheme: currentScheme(), schemes: SCHEMES, allowPersonal: personalAllowed() };
+  });
+
+  // ---- Settings: branding (white-label) -------------------------------------------
+  app.get('/api/admin/settings/branding', async () => branding());
+  app.put('/api/admin/settings/branding', {
+    schema: {
+      body: {
+        type: 'object', additionalProperties: false, minProperties: 1,
+        properties: { name: { type: 'string', maxLength: 60 }, supportUrl: { type: 'string', maxLength: 300 } },
+      },
+    },
+  }, async (req) => {
+    const saved = saveBranding(req.body);
+    audit(req, null, 'admin_branding', req.body);
+    return saved;
+  });
+  app.put('/api/admin/settings/branding/:asset', {
+    bodyLimit: 800 * 1024,   // base64 of a 512 KB logo
+    schema: {
+      body: {
+        type: 'object', required: ['type', 'data'], additionalProperties: false,
+        properties: { type: { type: 'string', maxLength: 40 }, data: { type: 'string', maxLength: 760_000 } },
+      },
+    },
+  }, async (req) => {
+    const saved = saveAsset(req.params.asset, req.body);
+    audit(req, null, 'admin_branding_image', { image: req.params.asset, type: req.body.type });
+    return saved;
+  });
+  app.delete('/api/admin/settings/branding/:asset', async (req) => {
+    const saved = removeAsset(req.params.asset);
+    audit(req, null, 'admin_branding_image_removed', { image: req.params.asset });
+    return saved;
+  });
+
+  // ---- Settings: single sign-on with Google, Microsoft, GitHub ---------------------
+  app.get('/api/admin/settings/sso', async () => sso.publicSettings());
+  app.put('/api/admin/settings/sso/:provider', {
+    schema: {
+      body: {
+        type: 'object', additionalProperties: false,
+        properties: {
+          enabled: { type: 'boolean' },
+          clientId: { type: 'string', maxLength: 200 },
+          clientSecret: { type: 'string', maxLength: 500 },
+          portals: { type: 'array', maxItems: 2, items: { type: 'string', enum: ['customer', 'admin'] } },
+          allowSignup: { type: 'boolean' },
+          allowedDomains: { type: 'array', maxItems: 50, items: { type: 'string', maxLength: 100 } },
+          tenant: { type: 'string', maxLength: 100 },
+        },
+      },
+    },
+  }, async (req) => {
+    const saved = sso.saveProvider(req.params.provider, req.body);
+    const { clientSecret, ...rest } = req.body;
+    audit(req, null, 'admin_sso_provider', { provider: req.params.provider, ...rest, secretChanged: !!clientSecret });
+    return saved;
   });
 
   // ---- Settings: Windows updates through the panel -----------------------------
-  app.get('/api/admin/settings/winupdates', async () => ({ enabled: updatesEnabled() }));
+  // (Linux package updates share this setting: { enabled: Windows, linux: Linux })
+  app.get('/api/admin/settings/winupdates', async () => ({ enabled: updatesEnabled(), linux: linuxUpdatesEnabled() }));
   app.put('/api/admin/settings/winupdates', {
-    schema: { body: { type: 'object', required: ['enabled'], additionalProperties: false, properties: { enabled: { type: 'boolean' } } } },
+    schema: {
+      body: {
+        type: 'object', additionalProperties: false, minProperties: 1,
+        properties: { enabled: { type: 'boolean' }, linux: { type: 'boolean' } },
+      },
+    },
   }, async (req) => {
-    setUpdatesEnabled(req.body.enabled);
-    audit(req, null, 'admin_winupdates', { enabled: req.body.enabled });
-    return { enabled: updatesEnabled() };
+    setUpdatesEnabled(req.body.enabled, req.body.linux);
+    audit(req, null, 'admin_winupdates', req.body);
+    return { enabled: updatesEnabled(), linux: linuxUpdatesEnabled() };
   });
 
   app.get('/api/admin/settings/expiry', async () => expirySettings());
@@ -569,6 +706,21 @@ export default async function adminRoutes(app) {
   app.get('/api/admin/networks', async () => allNetworks());
 
   // ---- Activity ---------------------------------------------------------
+
+  // Filtered and paged: ?actor=customer|admin|system|anonymous &category=create|change|delete|power|security
+  //   &userId= &vmid= &q= &before=<id of the last event shown> &limit=
+  app.get('/api/admin/activity', {
+    schema: {
+      querystring: {
+        type: 'object', additionalProperties: false,
+        properties: {
+          actor: { type: 'string', enum: ACTOR_KEYS }, category: { type: 'string', enum: CATEGORY_KEYS },
+          userId: { type: 'integer', minimum: 1 }, vmid: { type: 'integer', minimum: 1 }, q: { type: 'string', maxLength: 100 },
+          before: { type: 'integer', minimum: 1 }, limit: { type: 'integer', minimum: 1, maximum: 500 },
+        },
+      },
+    },
+  }, async (req) => activity(req.query));
 
   app.get('/api/admin/audit', async (req) => {
     const limit = Math.min(Number(req.query.limit) || 200, 500);
