@@ -8,6 +8,10 @@ import * as oidc from './oidc.js';
 import { checkInvitation, acceptInvitation } from './invite.js';
 import * as passkeys from './passkeys.js';
 
+// Password sign-ins per minute and address. Only the test suite raises it (all
+// browser tests sign in from 127.0.0.1 within a minute).
+const SIGNIN_LIMIT = Math.max(1, Number(process.env.SIGNIN_RATE_LIMIT) || 10);
+
 const SESSION_HOURS = 8;
 // Compared against when the email is unknown, so response time
 // doesn't reveal which accounts exist.
@@ -92,7 +96,7 @@ async function authPlugin(app, { scope }) {
   const expired = (reply) => reply.code(401).send({ error: 'The sign-in took too long. Please start again.', restart: true });
 
   app.post('/api/auth/login', {
-    config: { rateLimit: { max: 10, timeWindow: '1 minute' } },
+    config: { rateLimit: { max: SIGNIN_LIMIT, timeWindow: '1 minute' } },
     schema: {
       body: {
         type: 'object',

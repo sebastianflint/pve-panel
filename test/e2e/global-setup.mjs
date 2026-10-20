@@ -2,7 +2,8 @@
 import { startStack } from '../support/stack.mjs';
 
 export default async function globalSetup() {
-  const stack = await startStack();
+  // every browser test signs in from 127.0.0.1: more than the usual 10 per minute
+  const stack = await startStack({ env: { SIGNIN_RATE_LIMIT: '100' } });
   await stack.offerTemplates();
   const lena = await stack.customerWith('lena@example.com', { limits: {} });
   const admin = await stack.adminSession();
