@@ -34,4 +34,6 @@ Admin endpoints (admin port, admin session required): `GET/POST /api/admin/users
 `DELETE /api/admin/vms/:vmid/server`, `GET /api/admin/users/:id/deletion-plan`,
 `GET /api/admin/tasks/:upid`, `GET /api/admin/templates`,
 `PUT/DELETE /api/admin/templates/:vmid`, `GET /api/admin/vpn`,
-`DELETE /api/admin/vpn/devices/:id`, `POST /api/admin/vpn/sync`, `GET /api/admin/audit`.
+`DELETE /api/admin/vpn/devices/:id`, `POST /api/admin/vpn/sync`, `GET /api/admin/audit`,
+`GET /api/admin/setup-check` (last result), `POST /api/admin/setup-check/run`,
+`PUT /api/admin/setup-check/settings`.

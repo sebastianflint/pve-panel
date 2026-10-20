@@ -266,3 +266,23 @@ export function expirySummaryMessage(summary) {
     }),
   };
 }
+
+/** Setup check found problems that are new since the last run. */
+export function setupCheckMessage({ fresh, total }) {
+  const adminUrl = config.oidc.publicUrl.admin;
+  const lines = fresh.map((ch) => `${ch.status === 'error' ? 'Error' : 'Warning'}: ${ch.title}${ch.detail ? ` – ${ch.detail}` : ''}`);
+  const where = 'Open Setup check in the admin interface for details and how to fix them.';
+  return {
+    subject: `${config.brand.name}: setup check found ${fresh.length} new problem${fresh.length > 1 ? 's' : ''}`,
+    text: `${lines.map((l) => `• ${l}`).join('\n')}\n\n${total > fresh.length ? `${total} problems in total. ` : ''}${where}${adminUrl ? `\n${adminUrl}` : ''}`,
+    html: layout({
+      title: 'The setup check found new problems',
+      paragraphs: [
+        ...lines.map((l) => esc(l)),
+        `${total > fresh.length ? `${total} problems in total. ` : ''}${esc(where)}`,
+      ],
+      button: adminUrl ? { href: adminUrl, label: 'Open the admin interface' } : null,
+      footer: 'You get this email only when a problem is new. Switch it off in Setup check.',
+    }),
+  };
+}

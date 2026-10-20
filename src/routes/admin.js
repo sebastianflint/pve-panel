@@ -12,6 +12,9 @@ import {
 } from '../expiry.js';
 import { versionInfo, updateStatus } from '../version.js';
 import {
+  GROUPS, runSetupCheck, lastSetupCheck, setupCheckSettings, saveSetupCheckSettings,
+} from '../setupcheck.js';
+import {
   emailSettings, emailConfigured, saveEmailSettings, deleteEmailSettings, sendMail, testMessage,
 } from '../mail.js';
 import { sendInvitation, unusablePassword, inviteState } from '../invite.js';
@@ -564,6 +567,27 @@ export default async function adminRoutes(app) {
     uptimeSeconds: Math.round(process.uptime()),
     update: await updateStatus({ force: req.query.refresh === '1' }),
   }));
+
+  // ---- Setup check (read-only checks of Proxmox and the panel's configuration) ---------
+  app.get('/api/admin/setup-check', async () => ({
+    groups: GROUPS, settings: setupCheckSettings(), result: lastSetupCheck(),
+  }));
+
+  app.post('/api/admin/setup-check/run', { config: { rateLimit: { max: 10, timeWindow: '1 minute' } } }, async (req) => {
+    const result = await runSetupCheck({ requestIp: req.ip, log: req.log });
+    audit(req, null, 'admin_setup_check', result.summary);
+    return { groups: GROUPS, settings: setupCheckSettings(), result };
+  });
+
+  app.put('/api/admin/setup-check/settings', {
+    schema: {
+      body: { type: 'object', additionalProperties: false, required: ['notify'], properties: { notify: { type: 'boolean' } } },
+    },
+  }, async (req) => {
+    const settings = saveSetupCheckSettings(req.body);
+    audit(req, null, 'admin_setup_check_settings', settings);
+    return settings;
+  });
 
   // ---- Networks -------------------------------------------------------------
   app.get('/api/admin/networks', async () => allNetworks());

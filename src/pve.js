@@ -59,6 +59,29 @@ async function request(method, path, params) {
   return json?.data;
 }
 
+/**
+ * One raw GET for the setup check: never throws, and keeps what a normal call
+ * hides (the network/TLS error code and the Date header of the answer).
+ */
+export async function probe(path) {
+  const started = Date.now();
+  try {
+    const res = await fetch(new URL(`${config.pve.url}/api2/json${path}`), {
+      headers: { Authorization: authHeader }, dispatcher, signal: AbortSignal.timeout(10_000),
+    });
+    const text = await res.text();
+    let json = null;
+    try { json = JSON.parse(text); } catch { /* non-JSON body */ }
+    return {
+      ok: res.ok, status: res.status, message: (json?.message || res.statusText || '').trim(),
+      data: json?.data, date: res.headers.get('date'), ms: Date.now() - started,
+    };
+  } catch (err) {
+    const code = err.name === 'TimeoutError' ? 'TIMEOUT' : (err.cause?.code || err.cause?.message || err.message);
+    return { ok: false, status: 0, error: String(code), ms: Date.now() - started };
+  }
+}
+
 export const pve = {
   get: (path, params) => request('GET', path, params),
   post: (path, params) => request('POST', path, params),

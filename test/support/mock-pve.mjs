@@ -10,6 +10,8 @@
 //   /__tsowner/<vmid>            Tailscale logout refused (Windows profile owner)
 //   /__recovery/<vmid>           a Recovery partition blocks extending C:
 //   /__sdn, /__vms, /__gw        inspect state
+// Setup check: `perms` (path -> privileges, inherited by sub-paths), `cluster`
+// (datacenter firewall), `storageStatus`; tests change them directly.
 import http from 'node:http';
 import { WebSocketServer } from 'ws';
 
@@ -23,8 +25,8 @@ const log = (...a) => { if (debug) console.log('[mock-pve]', ...a.map(oneLine));
 
 export async function startMockPve({ port = 0 } = {}) {
   const vms = new Map([
-    [101, { vmid:101, node:'pve1', type:'qemu', name:'web01', status:'stopped', maxcpu:2, maxmem:4*2**30, maxdisk:20*2**30, cfg:{cores:2,memory:4096,ostype:'l26',scsi0:'VMStorage:vm-101-disk-0,size=20G'} }],
-    [102, { vmid:102, node:'pve1', type:'qemu', name:'other-customer', status:'running', maxcpu:2, maxmem:2*2**30, maxdisk:10*2**30, cfg:{cores:2,memory:2048} }],
+    [101, { vmid:101, node:'pve1', type:'qemu', name:'web01', pool:'customers', status:'stopped', maxcpu:2, maxmem:4*2**30, maxdisk:20*2**30, cfg:{cores:2,memory:4096,ostype:'l26',scsi0:'VMStorage:vm-101-disk-0,size=20G'} }],
+    [102, { vmid:102, node:'pve1', type:'qemu', name:'other-customer', pool:'customers', status:'running', maxcpu:2, maxmem:2*2**30, maxdisk:10*2**30, cfg:{cores:2,memory:2048} }],
     [9000,{ vmid:9000,node:'pve1', type:'qemu', name:'debian12-cloud', status:'stopped', template:1, maxcpu:1, maxmem:2**30, maxdisk:3*2**30, cfg:{cores:1,memory:1024,ostype:'l26',agent:'1',boot:'order=scsi0',scsi0:'VMStorage:base-9000-disk-0,size=3G',ide2:'VMStorage:vm-9000-cloudinit,media=cdrom',ciuser:'debian'} }],
     [9100,{ vmid:9100,node:'pve1', type:'qemu', name:'win2022-sysprep', status:'stopped', template:1, maxcpu:2, maxmem:4*2**30, maxdisk:40*2**30, cfg:{cores:2,memory:4096,ostype:'win11',agent:'1',boot:'order=scsi0',scsi0:'VMStorage:base-9100-disk-0,size=40G',net0:'e1000=BC:24:11:00:00:01,bridge=vmbr0'} }],
     [9101,{ vmid:9101,node:'pve1', type:'qemu', name:'win2022-bad-unattend', status:'stopped', template:1, maxcpu:2, maxmem:4*2**30, maxdisk:40*2**30, cfg:{cores:2,memory:4096,ostype:'win11',agent:'1',scsi0:'VMStorage:base-9101-disk-0,size=40G',net0:'e1000=BC:24:11:00:00:02,bridge=vmbr0'} }],
@@ -41,6 +43,30 @@ export async function startMockPve({ port = 0 } = {}) {
   const destroyed = []; // DELETE calls, for assertions
 
   const tsApproved = new Set();
+
+  // ---- Setup check state ---------------------------------------------------------
+  const VM_PRIVS = ['VM.Audit', 'VM.PowerMgmt', 'VM.Console', 'VM.Snapshot', 'VM.Snapshot.Rollback', 'VM.GuestAgent.Audit',
+    'VM.GuestAgent.Unrestricted', 'VM.Allocate', 'VM.Clone', 'VM.Config.CPU', 'VM.Config.Memory', 'VM.Config.Disk',
+    'VM.Config.Cloudinit', 'VM.Config.Options', 'VM.Config.Network'];
+  const perms = {
+    '/pool/customers': [...VM_PRIVS], '/pool/templates': ['VM.Audit', 'VM.Clone'],
+    '/vms/9000': ['VM.Audit', 'VM.Clone'], '/vms/9001': ['VM.Audit', 'VM.Clone'], '/vms/9100': ['VM.Audit', 'VM.Clone'],
+    '/vms/150': ['VM.Audit', 'VM.GuestAgent.Unrestricted'],
+    '/storage': ['Datastore.AllocateSpace', 'Datastore.Audit'],
+    '/sdn': ['SDN.Audit', 'SDN.Allocate', 'SDN.Use'],
+    '/': ['Sys.Audit'],
+  };
+  // privileges on a path apply to everything below it ('/' only to itself here, like --propagate 0)
+  const effective = (path) => {
+    const out = {};
+    for (const [p, list] of Object.entries(perms)) {
+      const applies = p === path || (p !== '/' && path.startsWith(`${p}/`));
+      if (applies) for (const priv of list) out[priv] = 1;
+    }
+    return out;
+  };
+  const cluster = { firewall: { enable: 1 } };
+  const storageStatus = { VMStorage: { total: 500 * 2 ** 30, avail: 300 * 2 ** 30, active: 1 }, 'local-lvm': { total: 100 * 2 ** 30, avail: 60 * 2 ** 30, active: 1 } };
 
   const newMac = () => 'BC:24:11:' + Array.from({ length: 3 }, () => Math.floor(Math.random() * 256).toString(16).padStart(2, '0').toUpperCase()).join(':');
   const withMac = (net) => (!net || /^\w+=[0-9A-Fa-f:]{17}/.test(net) ? net : net.replace(/^(\w+)/, `$1=${newMac()}`));
@@ -129,6 +155,11 @@ export async function startMockPve({ port = 0 } = {}) {
     const u = new URL(req.url, 'http://x'); const p = u.pathname.replace('/api2/json','');
     if (req.headers.authorization !== 'PVEAPIToken=panel@pve!panel=x') return send(res, null, 401);
     if (p === '/cluster/resources') return send(res, [...vms.values()].map(({cfg, ...v}) => ({...v, id:`qemu/${v.vmid}`, cpu:0.05, mem:v.maxmem/4, uptime: v.status==='running'?600:0})));
+    if (p === '/version') return send(res, { version: '9.0.6', release: '9.0', repoid: 'mock' });
+    if (p === '/access/permissions') { const path = u.searchParams.get('path') ?? '/'; return send(res, { [path]: effective(path) }); }
+    if (p === '/cluster/firewall/options') { if (!('Sys.Audit' in effective('/'))) return send(res, null, 403, 'Permission check failed (/, Sys.Audit)'); return send(res, cluster.firewall); }
+    const sst = p.match(/^\/nodes\/[^/]+\/storage\/([^/]+)\/status$/);
+    if (sst) { const st = storageStatus[decodeURIComponent(sst[1])]; return st ? send(res, { ...st, used: st.total - st.avail, enabled: 1 }) : send(res, null, 500, `storage '${sst[1]}' does not exist`); }
     if (p === '/__gw') return send(res, Object.fromEntries(gwFiles));
     if (p === '/__sdn') return send(res, { ...sdn, subnets: Object.fromEntries(sdn.subnets) });
     if (p.startsWith('/__tsowner/')) { vms.get(Number(p.split('/')[2])).tsForeign = true; return send(res, 'ok'); }
@@ -142,7 +173,7 @@ export async function startMockPve({ port = 0 } = {}) {
     if (p === '/cluster/nextid') { const want = u.searchParams.get('vmid'); if (want) return vms.has(Number(want)) ? send(res,null,400,`VM ${want} already exists`) : send(res, want); let id=100; while (vms.has(id)) id++; return send(res, String(id)); }
     if (/^\/nodes\/[^/]+\/storage$/.test(p)) return send(res, [{storage:'VMStorage'},{storage:'local-lvm'}]);
     if (p === '/cluster/sdn/zones' && req.method==='GET') return send(res, sdn.zones);
-    if (p === '/cluster/sdn/zones' && req.method==='POST') { const b = await body(req); log('SDN ZONE', JSON.stringify(b)); sdn.zones.push({zone:b.zone,type:b.type}); sdn.pending++; return send(res,null); }
+    if (p === '/cluster/sdn/zones' && req.method==='POST') { const b = await body(req); log('SDN ZONE', JSON.stringify(b)); sdn.zones.push({zone:b.zone,type:b.type,dhcp:b.dhcp}); sdn.pending++; return send(res,null); }
     if (p === '/cluster/sdn/vnets' && req.method==='GET') return send(res, sdn.vnets);
     if (p === '/cluster/sdn/vnets' && req.method==='POST') { const b = await body(req); log('SDN VNET', JSON.stringify(b)); sdn.vnets.push({vnet:b.vnet,zone:b.zone,alias:b.alias}); sdn.subnets.set(b.vnet, []); sdn.pending++; return send(res,null); }
     const sn = p.match(/^\/cluster\/sdn\/vnets\/([^/]+)\/subnets$/);
@@ -165,7 +196,7 @@ export async function startMockPve({ port = 0 } = {}) {
       if (vm.status !== 'stopped') return send(res, null, 500, 'VM is running'); return send(res, task('qmdestroy', vmid, 1000, () => vms.delete(vmid))); }
     if (rest === '/clone' && req.method === 'POST') { const b = await body(req); log('CLONE', vmid, JSON.stringify(b));
       const id = Number(b.newid); if (vms.has(id)) return send(res,null,500,`VM ${id} already exists`);
-      vms.set(id, { origin: vmid, vmid:id, node:'pve1', type:'qemu', name:b.name, status:'stopped', lock:'clone', maxcpu:vm.maxcpu, maxmem:vm.maxmem, maxdisk:vm.maxdisk, cfg:{...vm.cfg, scsi0: vm.cfg.scsi0.replace(`base-${vmid}`, `vm-${id}`), net0: vm.cfg.net0 ? vm.cfg.net0.replace(/=[0-9A-Fa-f:]{17}/, '').replace(/^(\w+)/, `$1=${newMac()}`) : `virtio=${newMac()},bridge=vmbr0`} });
+      vms.set(id, { origin: vmid, vmid:id, node:'pve1', type:'qemu', name:b.name, pool:b.pool, status:'stopped', lock:'clone', maxcpu:vm.maxcpu, maxmem:vm.maxmem, maxdisk:vm.maxdisk, cfg:{...vm.cfg, scsi0: vm.cfg.scsi0.replace(`base-${vmid}`, `vm-${id}`), net0: vm.cfg.net0 ? vm.cfg.net0.replace(/=[0-9A-Fa-f:]{17}/, '').replace(/^(\w+)/, `$1=${newMac()}`) : `virtio=${newMac()},bridge=vmbr0`} });
       if (vms.get(id).cfg.net0 && !/=/.test(vms.get(id).cfg.net0.split(',')[0])) vms.get(id).cfg.net0 = withMac(vms.get(id).cfg.net0);
       return send(res, task('qmclone', vmid, 2500, () => { delete vms.get(id).lock; })); }
     if (rest === '/config' && req.method === 'GET') return send(res, vm.cfg);
@@ -190,6 +221,8 @@ export async function startMockPve({ port = 0 } = {}) {
       vm.fwRules ??= [];
       if (rest === '/firewall/rules' && req.method === 'POST') vm.fwRules.splice(Number(b.pos ?? vm.fwRules.length), 0, b);
       if (rest === '/firewall/rules' && req.method === 'GET') return send(res, vm.fwRules.map((r, i) => ({ ...r, pos: i })));
+      if (rest === '/firewall/options' && req.method === 'PUT') vm.fwOptions = { ...(vm.fwOptions ?? {}), ...b };
+      if (rest === '/firewall/options' && req.method === 'GET') return send(res, vm.fwOptions ?? {});
       if (req.method !== 'GET') log('FW', vmid, req.method, rest, JSON.stringify(b)); return send(res, req.method==='GET' ? [] : null); }
     if (rest === '/agent/ping') { if (vm.status==='running' && Date.now()-(started.get(vmid) ?? 0) > 2000) return send(res,{}); return send(res,null,500,'QEMU guest agent is not running'); }
     if (rest === '/agent/set-user-password') { await body(req); log('AGENT set-user-password (reports OK, changes nothing)', vmid); return send(res,{}); }
@@ -272,7 +305,7 @@ export async function startMockPve({ port = 0 } = {}) {
   return {
     url: `http://127.0.0.1:${actualPort}`,
     port: actualPort,
-    vms, sdn, gwFiles, destroyed,
+    vms, sdn, gwFiles, destroyed, perms, cluster, storageStatus,
     /** GET a control endpoint, e.g. control('/__lose/104/1') */
     control: (p) => fetch(`http://127.0.0.1:${actualPort}/api2/json${p}`, {
       headers: { authorization: 'PVEAPIToken=panel@pve!panel=x' },
