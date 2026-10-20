@@ -573,7 +573,7 @@ export default async function adminRoutes(app) {
     groups: GROUPS, settings: setupCheckSettings(), result: lastSetupCheck(),
   }));
 
-  app.post('/api/admin/setup-check/run', { config: { rateLimit: { max: 10, timeWindow: '1 minute' } } }, async (req) => {
+  app.post('/api/admin/setup-check/run', { config: { rateLimit: { max: 30, timeWindow: '1 minute' } } }, async (req) => {
     const result = await runSetupCheck({ requestIp: req.ip, log: req.log });
     audit(req, null, 'admin_setup_check', result.summary);
     return { groups: GROUPS, settings: setupCheckSettings(), result };
