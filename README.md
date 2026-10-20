@@ -136,6 +136,7 @@ PVE Panel was built with substantial help from an AI assistant (**Claude by Anth
 - See the running version and whether an update is available
 - Configure email (SMTP) in the admin portal and invite users by email
 - Give single customers or servers an expiry date: reminders, automatic stop, grace period, deletion
+- Run a setup check that finds missing Proxmox rights, broken templates and isolation gaps, with the fix for each
 
 ### Provisioning
 
@@ -762,6 +763,35 @@ Details: [Server expiry](https://sebastianflint.github.io/pve-panel/docs/adminis
 
 ---
 
+## 🩺 Setup check
+
+**Admin → Setup check** checks whether Proxmox and the panel are set up the way the enabled features need — and says how to fix what isn't, usually with the exact `pveum`/`qm` command.
+
+```text
+✓ Connected to Proxmox VE 9.0.6
+✕ Customer pool customers: 2 rights missing   → pveum role modify PanelCustomer --append 1 --privs "…"
+✕ The datacenter firewall is off: customers are NOT isolated
+! Template 9001 (Ubuntu 24.04): the guest agent is off  → qm set 9001 --agent enabled=1
+```
+
+| Group | Checks |
+|---|---|
+| Proxmox connection | reachable, token accepted, version, certificate verified, clock |
+| Permissions | the token's rights on pool, templates, storage, SDN and VPN gateway — only for features you use; PVE 8 and 9 privilege names |
+| Customer servers | assigned servers still exist and are in the pool |
+| Templates | still a template, guest agent on, cloud-init drive, free space on the target storage |
+| Customer networks | SDN zone with DHCP, VNets present, unapplied SDN changes, datacenter firewall, every customer server isolated |
+| Remote access | WireGuard gateway answers, `VPN_ENDPOINT` resolves |
+| Email · Security · Maintenance | email where features need it, `JWT_SECRET`, cookies, admin exposure, admins without 2FA, leftover `INITIAL_ADMIN_PASSWORD`, updates, database backups |
+
+- **Read-only** — it never changes anything in Proxmox
+- runs on demand and **automatically every day** (`SETUP_CHECK_HOURS`); administrators get an **email only when a problem is new**
+- the tab shows the number of open problems
+
+Details: [Setup check](https://sebastianflint.github.io/pve-panel/docs/administration/setup-check).
+
+---
+
 ## 🪟 Windows templates
 
 Windows systems can be deployed without cloud-init.
@@ -1114,6 +1144,7 @@ Only these file names are served, with a strict sandbox policy. Make sure you're
 │   ├── totp.js
 │   ├── passkeys.js
 │   ├── expiry.js
+│   ├── setupcheck.js
 │   ├── appearance.js
 │   ├── winupdate.js
 │   ├── oidc.js
@@ -1279,6 +1310,8 @@ Confirm that:
 - Admin port `3001` is not publicly reachable
 - OIDC and 2FA behave as expected
 - Proxmox API permissions are limited to the intended resources
+
+The **Setup check** in the admin portal covers the Proxmox side of this list automatically.
 
 ---
 

@@ -54,3 +54,9 @@ privilege; add it to the role the same way.
 
 New servers are placed into the `customers` pool (`PVE_POOL`), so the panel's
 normal permissions cover them automatically.
+
+:::tip Check it
+After preparing Proxmox, open **Setup check** in the admin interface: it lists any
+right that is missing for the features you use, with the command that adds it. See
+[Setup check](../administration/setup-check).
+:::

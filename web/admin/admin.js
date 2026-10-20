@@ -54,6 +54,8 @@ const ACTION_LABELS = {
   admin_expiry_rule: 'Changed customer expiry rule',
   admin_expiry_settings: 'Changed expiry settings',
   admin_expiry_run: 'Ran expiry check',
+  admin_setup_check: 'Ran the setup check',
+  admin_setup_check_settings: 'Changed setup check alerts',
   admin_appearance: 'Changed the color scheme',
   admin_winupdates: 'Changed Windows update setting',
   winupdate_started: 'Started Windows updates',
@@ -119,6 +121,13 @@ export function createAdmin({ root, api, toast, fail, confirmAction, promptText,
           api('/api/admin/settings/email'), api('/api/admin/settings/expiry'), api('/api/admin/settings/appearance'),
           api('/api/admin/settings/winupdates'),
         ]);
+      } else if (st.tab === 'setup') {
+        st.setup = await api('/api/admin/setup-check');
+        if (!st.setup.result) {
+          renderTab();
+          await runSetupCheck();
+          return;
+        }
       } else if (st.tab === 'about') {
         st.about = await api(`/api/admin/about${st.refreshAbout ? '?refresh=1' : ''}`);
         st.refreshAbout = false;
@@ -141,13 +150,14 @@ export function createAdmin({ root, api, toast, fail, confirmAction, promptText,
 
   // ---- shell ------------------------------------------------------------
   function render() {
-    const tabs = [['servers', 'Servers'], ['users', 'Customers'], ['templates', 'Templates'], ['vpn', 'VPN'], ['activity', 'Activity'], ['account', 'Your account'], ['settings', 'Settings'], ['about', 'About']];
+    const tabs = [['servers', 'Servers'], ['users', 'Customers'], ['templates', 'Templates'], ['vpn', 'VPN'], ['activity', 'Activity'], ['account', 'Your account'], ['settings', 'Settings'], ['setup', 'Setup check'], ['about', 'About']];
+    const count = (id) => (id === 'setup' && st.setupProblems ? ` <span class="tab-count" title="Problems found">${st.setupProblems}</span>` : '');
     root.innerHTML = `
       <div class="admin-inner">
         <h1>Administration</h1>
         <div class="tabs" role="tablist">
           ${tabs.map(([id, label]) =>
-            `<button class="tab" role="tab" data-admin-tab="${id}" aria-selected="${st.tab === id}">${label}</button>`).join('')}
+            `<button class="tab" role="tab" data-admin-tab="${id}" aria-selected="${st.tab === id}">${label}${count(id)}</button>`).join('')}
         </div>
         <section id="admin-body"></section>
       </div>`;
@@ -166,6 +176,7 @@ export function createAdmin({ root, api, toast, fail, confirmAction, promptText,
       renderPasskeys(body.querySelector('#admin-passkeys'));
     }
     if (st.tab === 'about') renderAbout();
+    if (st.tab === 'setup') renderSetupCheck();
     if (st.tab === 'settings') renderSettings();
     if (st.tab !== 'settings' && st.schemePreview) { st.schemePreview = null; applyScheme(st.appearance?.scheme); }
   }
@@ -1076,6 +1087,98 @@ export function createAdmin({ root, api, toast, fail, confirmAction, promptText,
     }
   });
 
+  // ---- setup check ----------------------------------------------------------
+  const CHECK_MARK = { ok: '✓', warn: '!', error: '✕', info: 'i', skipped: '–' };
+  const CHECK_WORD = { ok: 'OK', warn: 'Warning', error: 'Error', info: 'Note', skipped: 'Not checked' };
+
+  function setupProblemCount(result) {
+    return result ? (result.summary.error ?? 0) + (result.summary.warn ?? 0) : 0;
+  }
+  function updateSetupBadge(result) {
+    st.setupProblems = setupProblemCount(result);
+    const tab = root.querySelector('[data-admin-tab="setup"]');
+    if (!tab) return;
+    tab.querySelector('.tab-count')?.remove();
+    if (st.setupProblems) tab.insertAdjacentHTML('beforeend', ` <span class="tab-count" title="Problems found">${st.setupProblems}</span>`);
+  }
+
+  async function runSetupCheck() {
+    st.setupRunning = true;
+    if (st.tab === 'setup') renderSetupCheck();
+    try {
+      st.setup = await api('/api/admin/setup-check/run', { method: 'POST' });
+      updateSetupBadge(st.setup.result);
+    } catch (err) {
+      fail(err);
+    } finally {
+      st.setupRunning = false;
+      if (st.tab === 'setup') renderSetupCheck();
+    }
+  }
+
+  function renderSetupCheck() {
+    const body = root.querySelector('#admin-body');
+    const data = st.setup ?? {};
+    const r = data.result;
+    if (!r) {
+      body.innerHTML = `<div class="setup-check"><p class="muted">${st.setupRunning
+        ? '<span class="spinner"></span> Checking Proxmox and the panel\'s configuration… this takes a few seconds.'
+        : 'No check has run yet.'}</p></div>`;
+      return;
+    }
+    const s = r.summary;
+    const onlyProblems = !!st.setupOnlyProblems;
+    const shown = r.checks.filter((c) => !onlyProblems || ['error', 'warn', 'skipped'].includes(c.status));
+    const fix = (f) => (f ? `
+      <details class="check-fix">
+        <summary>How to fix</summary>
+        ${f.text ? `<p>${esc(f.text)}</p>` : ''}
+        ${(f.commands ?? []).map((cmd) => `
+          <div class="cmd"><code>${esc(cmd)}</code><button type="button" class="btn ghost cmd-copy" data-copy="${esc(cmd)}" title="Copy">Copy</button></div>`).join('')}
+      </details>` : '');
+    const groups = data.groups.map(([id, label]) => {
+      const items = shown.filter((c) => c.group === id);
+      if (!items.length) return '';
+      return `
+        <section class="check-group">
+          <h2 class="check-group-title">${esc(label)}</h2>
+          <ul class="check-list">
+            ${items.map((c) => `
+              <li class="check-item status-${c.status}" data-check="${esc(c.id)}">
+                <span class="check-mark" aria-label="${CHECK_WORD[c.status]}" title="${CHECK_WORD[c.status]}">${CHECK_MARK[c.status]}</span>
+                <div class="check-body">
+                  <p class="check-title">${esc(c.title)}</p>
+                  ${c.detail ? `<p class="check-detail">${esc(c.detail)}</p>` : ''}
+                  ${['ok'].includes(c.status) ? '' : fix(c.fix)}
+                </div>
+              </li>`).join('')}
+          </ul>
+        </section>`;
+    }).join('');
+    const problems = s.error + s.warn;
+    body.innerHTML = `
+      <div class="setup-check">
+        <div class="section-head setup-head">
+          <div>
+            <p class="setup-verdict ${s.error ? 'bad' : s.warn ? 'meh' : 'good'}">${s.error
+              ? `${s.error} error${s.error > 1 ? 's' : ''}${s.warn ? ` and ${s.warn} warning${s.warn > 1 ? 's' : ''}` : ''} need your attention`
+              : s.warn ? `${s.warn} warning${s.warn > 1 ? 's' : ''}, no errors` : 'Everything checked is set up correctly'}</p>
+            <p class="muted small" style="margin:4px 0 0">Checked ${esc(new Date(r.at).toLocaleString())}${r.automatic ? ' (automatic)' : ''},
+              ${(r.durationMs / 1000).toFixed(1)} s · ${s.ok} OK${s.info ? ` · ${s.info} note${s.info > 1 ? 's' : ''}` : ''}${s.skipped ? ` · ${s.skipped} not checked` : ''}</p>
+          </div>
+          <button class="btn primary" data-setup-run ${st.setupRunning ? 'disabled' : ''}>${st.setupRunning ? '<span class="spinner"></span> Checking…' : 'Run again'}</button>
+        </div>
+        <div class="row setup-options">
+          <label class="check"><input type="checkbox" data-setup-only ${onlyProblems ? 'checked' : ''}><span>Show only problems</span></label>
+          <label class="check"><input type="checkbox" data-setup-notify ${data.settings?.notify ? 'checked' : ''}>
+            <span>Email administrators about new problems <span class="muted">(automatic check every day; needs email under Settings)</span></span></label>
+        </div>
+        ${onlyProblems && !problems && !s.skipped ? '<p class="muted">No problems found.</p>' : groups}
+        <p class="muted small">The setup check only reads: it never changes anything in Proxmox. Commands under
+          “How to fix” are run by you on a Proxmox node (or the panel host).</p>
+      </div>`;
+  }
+
   // ---- about --------------------------------------------------------------
   function renderAbout() {
     const a = st.about;
@@ -1279,6 +1382,26 @@ export function createAdmin({ root, api, toast, fail, confirmAction, promptText,
       return;
     }
 
+    if (t.hasAttribute('data-setup-run')) {
+      await runSetupCheck();
+      return;
+    }
+
+    if (t.dataset.copy !== undefined && t.classList.contains('cmd-copy')) {
+      try {
+        await navigator.clipboard.writeText(t.dataset.copy);
+        toast('Copied');
+      } catch {
+        // no clipboard (plain http): select the command so Ctrl+C works
+        const range = document.createRange();
+        range.selectNodeContents(t.previousElementSibling);
+        const sel = window.getSelection();
+        sel.removeAllRanges();
+        sel.addRange(range);
+      }
+      return;
+    }
+
     if (t.hasAttribute('data-check-updates')) {
       st.refreshAbout = true;
       t.disabled = true;
@@ -1371,6 +1494,19 @@ export function createAdmin({ root, api, toast, fail, confirmAction, promptText,
   });
 
   root.addEventListener('change', async (e) => {
+    if (e.target.matches?.('[data-setup-only]')) {
+      st.setupOnlyProblems = e.target.checked;
+      renderSetupCheck();
+      return;
+    }
+    if (e.target.matches?.('[data-setup-notify]')) {
+      const box = e.target;
+      try {
+        st.setup.settings = await api('/api/admin/setup-check/settings', { method: 'PUT', body: { notify: box.checked } });
+        toast(box.checked ? 'Administrators get an email when the daily check finds new problems' : 'No more setup check emails');
+      } catch (err) { fail(err); box.checked = !box.checked; }
+      return;
+    }
     if (e.target.matches?.('[data-winupdates]')) {
       const box = e.target;
       try {
@@ -1412,6 +1548,7 @@ export function createAdmin({ root, api, toast, fail, confirmAction, promptText,
     open() {
       render();
       load();
+      api('/api/admin/setup-check').then((d) => updateSetupBadge(d.result)).catch(() => {});
     },
     openTab(tab) {
       st.tab = tab;

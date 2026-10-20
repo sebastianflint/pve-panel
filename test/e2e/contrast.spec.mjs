@@ -50,9 +50,11 @@ for (const mode of ['light', 'dark']) {
         await admin.goto(A());
         await expect(admin.locator('#vm-rows tr').first()).toBeVisible();
         await check(admin, scheme, 'admin servers');
-        for (const [tab, ready] of [['users', 'tr[data-user]'], ['settings', '#email-form'], ['account', '.security-card'], ['about', '.about']]) {
+        for (const [tab, ready] of [['users', 'tr[data-user]'], ['settings', '#email-form'], ['account', '.security-card'], ['setup', '.check-item'], ['about', '.about']]) {
           await admin.locator(`[data-admin-tab=${tab}]`).click();
           await expect(admin.locator(ready).first()).toBeVisible();
+          // every "How to fix" open, so its text and commands are measured too
+          if (tab === 'setup') await admin.evaluate(() => document.querySelectorAll('.check-fix').forEach((d) => { d.open = true; }));
           await check(admin, scheme, `admin ${tab}`);
         }
       }

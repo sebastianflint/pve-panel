@@ -6,6 +6,10 @@ sidebar_position: 9
 The **Activity** tab in the admin interface records the exact reason of most failures
 (sign-ins, provisioning, deletions). Check it first.
 
+If something doesn't work at all (creating servers, networks, the VPN), run the
+[Setup check](./administration/setup-check): it finds missing Proxmox rights, broken
+templates and an inactive firewall, and shows the command that fixes each.
+
 ## Guest agent errors
 
 **"qga command 'guest-exec-status' failed - got timeout":** the guest agent in a
