@@ -57,10 +57,13 @@ export async function startMockPve({ port = 0 } = {}) {
     '/': ['Sys.Audit'],
   };
   // privileges on a path apply to everything below it ('/' only to itself here, like --propagate 0)
+  // a VM inherits the rights of its pool (like Proxmox)
   const effective = (path) => {
     const out = {};
+    const vm = /^\/vms\/(\d+)$/.exec(path) ? vms.get(Number(path.split('/')[2])) : null;
+    const paths = [path, ...(vm?.pool ? [`/pool/${vm.pool}`] : [])];
     for (const [p, list] of Object.entries(perms)) {
-      const applies = p === path || (p !== '/' && path.startsWith(`${p}/`));
+      const applies = paths.some((x) => p === x || (p !== '/' && x.startsWith(`${p}/`)));
       if (applies) for (const priv of list) out[priv] = 1;
     }
     return out;
@@ -154,7 +157,8 @@ export async function startMockPve({ port = 0 } = {}) {
   const srv = http.createServer(async (req, res) => {
     const u = new URL(req.url, 'http://x'); const p = u.pathname.replace('/api2/json','');
     if (req.headers.authorization !== 'PVEAPIToken=panel@pve!panel=x') return send(res, null, 401);
-    if (p === '/cluster/resources') return send(res, [...vms.values()].map(({cfg, ...v}) => ({...v, id:`qemu/${v.vmid}`, cpu:0.05, mem:v.maxmem/4, uptime: v.status==='running'?600:0})));
+    // like Proxmox: the pool of a guest is only shown with Pool.Audit on that pool
+    if (p === '/cluster/resources') return send(res, [...vms.values()].map(({cfg, pool, ...v}) => ({...v, ...(pool && 'Pool.Audit' in effective(`/pool/${pool}`) ? { pool } : {}), id:`qemu/${v.vmid}`, cpu:0.05, mem:v.maxmem/4, uptime: v.status==='running'?600:0})));
     if (p === '/version') return send(res, { version: '9.0.6', release: '9.0', repoid: 'mock' });
     if (p === '/access/permissions') { const path = u.searchParams.get('path') ?? '/'; return send(res, { [path]: effective(path) }); }
     if (p === '/cluster/firewall/options') { if (!('Sys.Audit' in effective('/'))) return send(res, null, 403, 'Permission check failed (/, Sys.Audit)'); return send(res, cluster.firewall); }

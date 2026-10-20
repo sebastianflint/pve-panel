@@ -116,7 +116,7 @@ test('customer isolation: datacenter firewall, VM firewall, panel rules', async 
   assert.equal(find(r, 'net:zone').status, 'ok');
   assert.equal(find(r, 'net:vnets').status, 'ok');
   assert.equal(find(r, 'net:isolation').status, 'ok');
-  assert.equal(find(r, 'srv:ok').status, 'ok', 'the new server is in the pool');
+  assert.equal(find(r, 'srv:ok').status, 'ok', 'the panel has rights on the new server');
 
   stack.mock.vms.get(vmid).fwOptions.enable = '0';
   stack.mock.cluster.firewall.enable = 0;
@@ -139,23 +139,40 @@ test('customer isolation: datacenter firewall, VM firewall, panel rules', async 
   stack.mock.vms.get(vmid).fwOptions.enable = 1;
 });
 
-test('assigned servers that are gone or outside the pool', async () => {
+test('assigned servers: gone, no rights, outside the pool', async () => {
   const lena = dbh.prepare("SELECT id FROM users WHERE email = 'lena@example.com'").get().id;
+  // Like Proxmox without Pool.Audit: the pool isn't shown, and that alone is no problem
+  let r = await run();
+  assert.equal(find(r, 'srv:ok').status, 'ok', JSON.stringify(r.checks.filter((c) => c.group === 'servers')));
+
   dbh.prepare("INSERT INTO vms (vmid, user_id, label) VALUES (777, ?, 'ghost')").run(lena);
   dbh.prepare("INSERT INTO vms (vmid, user_id, label) VALUES (102, ?, 'elsewhere')").run(lena);
-  stack.mock.vms.get(102).pool = 'other';
+  stack.mock.vms.get(102).pool = 'other';        // outside the pool: no rights on it
+  stack.mock.perms['/vms/102'] = ['VM.Audit'];   // visible, but nothing else
   try {
-    const r = await run();
+    r = await run();
     const gone = find(r, 'srv:missing');
     assert.equal(gone.status, 'error');
     assert.match(gone.detail, /777 \(ghost\)/);
     assert.ok(gone.fix.commands.includes('pveum pool modify customers --vms 777'));
-    const outside = find(r, 'srv:pool');
-    assert.equal(outside.status, 'warn');
-    assert.match(outside.detail, /102 \(elsewhere\)/);
+    const rights = find(r, 'srv:rights');
+    assert.equal(rights.status, 'error');
+    assert.match(rights.detail, /102 \(elsewhere\).*Missing: VM\.PowerMgmt, VM\.Console, VM\.Snapshot/);
+    assert.ok(rights.fix.commands.includes('pveum pool modify customers --vms 102'));
+    assert.equal(find(r, 'srv:pool'), undefined);
+
+    // rights from elsewhere, and Pool.Audit reveals the other pool: only a warning
+    stack.mock.perms['/vms/102'] = ['VM.Audit', 'VM.PowerMgmt', 'VM.Console', 'VM.Snapshot'];
+    stack.mock.perms['/pool/other'] = ['Pool.Audit'];
+    r = await run();
+    assert.equal(find(r, 'srv:rights'), undefined);
+    assert.equal(find(r, 'srv:pool').status, 'warn');
+    assert.match(find(r, 'srv:pool').detail, /102 in other/);
   } finally {
     dbh.prepare('DELETE FROM vms WHERE vmid IN (777, 102)').run();
     stack.mock.vms.get(102).pool = 'customers';
+    delete stack.mock.perms['/vms/102'];
+    delete stack.mock.perms['/pool/other'];
   }
 });
 

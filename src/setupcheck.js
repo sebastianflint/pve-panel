@@ -253,7 +253,6 @@ async function checkServers(c, ctx) {
     return;
   }
   const missing = rows.filter((r) => !ctx.guests.has(r.vmid));
-  const outside = rows.filter((r) => ctx.guests.has(r.vmid) && ctx.guests.get(r.vmid).pool !== config.pve.pool);
   const list = (xs) => xs.slice(0, 12).map((r) => `${r.vmid}${r.label ? ` (${r.label})` : ''} – ${r.email}`).join('; ')
     + (xs.length > 12 ? `; and ${xs.length - 12} more` : '');
   if (missing.length) {
@@ -263,15 +262,40 @@ async function checkServers(c, ctx) {
         commands: [`pveum pool modify ${config.pve.pool} --vms ${missing.map((r) => r.vmid).join(',')}`],
       });
   }
+
+  // What counts is the token's rights on each server (wherever they come from).
+  // Proxmox only reveals a server's pool with Pool.Audit, which the panel doesn't
+  // need, so a missing pool field says nothing.
+  const NEEDED = ['VM.Audit', 'VM.PowerMgmt', 'VM.Console', 'VM.Snapshot'];
+  const visible = rows.filter((r) => ctx.guests.has(r.vmid));
+  const lacking = [];
+  for (const r of visible) {
+    try {
+      const have = await privilegesAt(`/vms/${r.vmid}`);
+      const miss = NEEDED.filter((p) => !(p in have));
+      if (miss.length) lacking.push({ ...r, miss });
+    } catch { /* unreadable: reported by the permission checks */ }
+  }
+  if (lacking.length) {
+    const names = [...new Set(lacking.flatMap((r) => r.miss))];
+    c.add('servers', 'srv:rights', 'error', `The panel lacks rights on ${lacking.length} assigned server${lacking.length > 1 ? 's' : ''}`,
+      `${list(lacking)}. Missing: ${names.join(', ')}. Customers can't control ${lacking.length > 1 ? 'these servers' : 'this server'}.`, {
+        text: `Put them into the pool ${config.pve.pool}, so the panel's pool rights cover them.`,
+        commands: [`pveum pool modify ${config.pve.pool} --vms ${lacking.map((r) => r.vmid).join(',')}`],
+      });
+  }
+  // Only when Proxmox does show the pool (the token has Pool.Audit there)
+  const outside = visible.filter((r) => !lacking.some((l) => l.vmid === r.vmid)
+    && ctx.guests.get(r.vmid).pool && ctx.guests.get(r.vmid).pool !== config.pve.pool);
   if (outside.length) {
     c.add('servers', 'srv:pool', 'warn', `${outside.length} assigned server${outside.length > 1 ? 's are' : ' is'} outside the pool ${config.pve.pool}`,
-      `${list(outside)}. They only work as long as the token has rights on them some other way.`, {
+      `${outside.map((r) => `${r.vmid} in ${ctx.guests.get(r.vmid).pool}`).join('; ')}. They work because the token has rights on them some other way.`, {
         text: 'Move them into the pool, so the panel\'s pool rights cover them.',
         commands: [`pveum pool modify ${config.pve.pool} --vms ${outside.map((r) => r.vmid).join(',')}`],
       });
   }
-  if (!missing.length && !outside.length) {
-    c.add('servers', 'srv:ok', 'ok', `All ${rows.length} assigned servers are visible and in the pool ${config.pve.pool}`);
+  if (!missing.length && !lacking.length && !outside.length) {
+    c.add('servers', 'srv:ok', 'ok', `The panel has the needed rights on all ${rows.length} assigned servers`);
   }
 }
 
