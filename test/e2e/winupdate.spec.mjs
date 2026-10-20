@@ -11,7 +11,8 @@ test('installs Windows updates from the Updates tab', async ({ page }) => {
   await pve('/nodes/pve1/qemu/102/config', { method: 'PUT', headers: { 'content-type': 'application/x-www-form-urlencoded' }, body: 'ostype=win11' });
   await pve('/nodes/pve1/qemu/102/status/start', { method: 'POST' });
   const admin = await page.context().request;
-  await admin.post(`${process.env.E2E_ADMIN_URL}/api/auth/login`, { data: { email: 'admin@example.com', password: 'correct-horse-battery' } });
+  const login = await admin.post(`${process.env.E2E_ADMIN_URL}/api/auth/login`, { data: { email: 'admin@example.com', password: 'correct-horse-battery' } });
+  expect(login.status(), await login.text()).toBe(200);
   const users = await (await admin.get(`${process.env.E2E_ADMIN_URL}/api/admin/users`)).json();
   const lena = users.find((u) => u.email === 'lena@example.com');
   await admin.put(`${process.env.E2E_ADMIN_URL}/api/admin/vms/102`, { data: { userId: lena.id, label: 'Win server' } });
