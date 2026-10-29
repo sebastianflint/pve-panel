@@ -38,7 +38,7 @@ h1{font-size:clamp(2rem,4.5vw,3.2rem)} h2{font-size:clamp(1.6rem,3vw,2.2rem)} h3
 .btn-wa{background:#1f9d55;color:#fff;margin-top:8px}
 /* header */
 .topbar{background:var(--green);color:#e8f3ec;font-size:.82rem}.topbar .wrap{display:flex;justify-content:space-between;gap:12px;padding:6px 0}
-.topbar a{color:#fff;text-decoration:none;margin-left:16px}.topbar-links{display:flex;align-items:center}.lang{margin-left:16px;border:1px solid rgba(255,255,255,.5);border-radius:6px;padding:0 6px;font-weight:700}
+.topbar a{color:#fff;text-decoration:none;margin-left:16px}.topbar-links{display:flex;align-items:center}.lang{margin-left:16px;display:inline-flex;border:1px solid rgba(255,255,255,.5);border-radius:6px;overflow:hidden;font-weight:700}.topbar .lang a{margin:0;padding:0 8px;color:#fff}.topbar .lang a.cur{background:#fff;color:var(--green-d)}
 .site-header{position:sticky;top:0;z-index:50;background:var(--bg);border-bottom:1px solid var(--line)}
 .navbar{display:flex;align-items:center;justify-content:space-between;gap:16px;min-height:72px}
 .brand{display:flex;align-items:center;gap:12px;text-decoration:none;color:var(--ink)}.brand img{height:44px;width:auto}

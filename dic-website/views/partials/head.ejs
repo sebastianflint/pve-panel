@@ -1,7 +1,8 @@
 <%
   const m = (typeof meta !== 'undefined' && meta) || {};
   const pageTitle = m.title ? m.title + ' | ' + (st.site_short || 'DIC') : (st.site_name || 'PT Dahana Investama Corp');
-  const canonical = baseUrl + (m.path === '/' ? '' : (m.path || ''));
+  const mp = m.path || '/';
+  const canonical = baseUrl + (lang === 'en' ? toEn(mp) : (mp === '/' ? '' : mp));
   const img = (m.image || '/img/og-default.jpg'); const imgAbs = /^https?:/.test(img) ? img : baseUrl + img;
 %><!doctype html>
 <html lang="<%= lang || 'id' %>">
@@ -12,9 +13,13 @@
 <meta name="description" content="<%= m.description || '' %>">
 <% if (m.noindex) { %><meta name="robots" content="noindex, nofollow"><% } %>
 <link rel="canonical" href="<%= canonical %>">
+<link rel="alternate" hreflang="id" href="<%= baseUrl + (mp === '/' ? '' : mp) %>">
+<link rel="alternate" hreflang="en" href="<%= baseUrl + toEn(mp) %>">
+<link rel="alternate" hreflang="x-default" href="<%= baseUrl + (mp === '/' ? '' : mp) %>">
 <meta property="og:site_name" content="<%= st.site_name %>">
 <meta property="og:title" content="<%= pageTitle %>">
 <meta property="og:description" content="<%= m.description || '' %>">
+<meta property="og:locale" content="<%= lang === 'en' ? 'en_US' : 'id_ID' %>">
 <meta property="og:type" content="<%= m.type || 'website' %>">
 <meta property="og:url" content="<%= canonical %>">
 <meta property="og:image" content="<%= imgAbs %>">

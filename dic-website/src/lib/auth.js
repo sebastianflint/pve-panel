@@ -35,7 +35,7 @@ function csrfCheck(req, res, next) {
   const real = req.session && req.session.csrf;
   if (!real || sent.length !== real.length || !crypto.timingSafeEqual(Buffer.from(sent), Buffer.from(real))) {
     return res.status(403).render(req.originalUrl.startsWith('/admin') ? 'admin/error' : 'public/error', {
-      title: 'Sesi tidak valid', message: 'Token keamanan tidak valid atau kedaluwarsa. Muat ulang halaman dan coba lagi.', code: 403,
+      title: res.locals.__ ? res.locals.__('Sesi tidak valid') : 'Sesi tidak valid', message: res.locals.__ ? res.locals.__('Token keamanan tidak valid atau kedaluwarsa. Muat ulang halaman dan coba lagi.') : 'Token keamanan tidak valid atau kedaluwarsa. Muat ulang halaman dan coba lagi.', code: 403,
     });
   }
   next();

@@ -2,15 +2,15 @@
 <body>
 <%- include('../partials/header') %>
 <main id="konten">
-<section class="page-hero"><div class="wrap narrow-l"><nav class="crumb" aria-label="Breadcrumb"><a href="/">Beranda</a> / <a href="/berita">Berita</a></nav>
-  <span class="chip"><%= CAT_NEWS[post.category] || post.category %></span> <time class="muted" datetime="<%= post.published_at %>"><%= U.dateId(post.published_at) %></time>
-  <h1><%= post.title %></h1></div></section>
+<section class="page-hero"><div class="wrap narrow-l"><nav class="crumb" aria-label="<%= __('Breadcrumb') %>"><a href="<%= u('/') %>"><%= __("Beranda") %></a> / <a href="<%= u('/berita') %>"><%= __("Berita") %></a></nav>
+  <span class="chip"><%= CAT_NEWS[post.category] || post.category %></span> <time class="muted" datetime="<%= post.published_at %>"><%= dateL(post.published_at) %></time>
+  <h1><%= c(post,'title') %></h1></div></section>
 <article class="section"><div class="wrap narrow-l">
-  <% if (post.image) { %><figure class="photo wide"><img src="<%= post.image %>" alt="<%= post.caption || post.title %>"><% if (post.caption || post.photo_credit) { %><figcaption><%= post.caption %><%= post.photo_credit ? ' (Foto: ' + post.photo_credit + ')' : '' %></figcaption><% } %></figure><% } %>
-  <div class="prose"><%- post.body %></div>
-  <p><a class="btn btn-outline" href="/berita">&larr; Semua berita</a></p>
+  <% if (post.image) { %><figure class="photo wide"><img src="<%= post.image %>" alt="<%= c(post,'caption') || c(post,'title') %>"><% if (c(post,'caption') || post.photo_credit) { %><figcaption><%= c(post,'caption') %><%= post.photo_credit ? ' (' + __('Foto:') + ' ' + post.photo_credit + ')' : '' %></figcaption><% } %></figure><% } %>
+  <div class="prose"><%- c(post,'body') %></div>
+  <p><a class="btn btn-outline" href="<%= u('/berita') %>">&larr; <%= __("Semua berita") %></a></p>
 </div></article>
-<% if (related.length) { %><section class="section tint"><div class="wrap"><h2>Berita lainnya</h2><div class="grid g3"><% related.forEach(p => { %><%- include('post-card', { p }) %><% }) %></div></div></section><% } %>
-<script type="application/ld+json"><%- JSON.stringify({ '@context': 'https://schema.org', '@type': 'NewsArticle', headline: post.title, datePublished: post.published_at, image: post.image ? baseUrl + post.image : undefined, publisher: { '@type': 'Organization', name: st.site_name } }).replace(/</g, '\\u003c') %></script>
+<% if (related.length) { %><section class="section tint"><div class="wrap"><h2><%= __("Berita lainnya") %></h2><div class="grid g3"><% related.forEach(p => { %><%- include('post-card', { p }) %><% }) %></div></div></section><% } %>
+<script type="application/ld+json"><%- JSON.stringify({ '@context': 'https://schema.org', '@type': 'NewsArticle', headline: c(post,'title'), datePublished: post.published_at, image: post.image ? baseUrl + post.image : undefined, publisher: { '@type': 'Organization', name: st.site_name } }).replace(/</g, '\\u003c') %></script>
 </main>
 <%- include('../partials/footer') %>

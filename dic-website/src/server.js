@@ -9,6 +9,7 @@ const { db, settings } = require('./db');
 const { loadUser, csrfToken } = require('./lib/auth');
 const icon = require('./lib/icons');
 const U = require('./lib/util');
+const i18n = require('./i18n');
 
 if (config.isProd && config.sessionSecret.length < 32) {
   console.error('SESSION_SECRET wajib diisi (min. 32 karakter) pada production.'); process.exit(1);
@@ -80,17 +81,30 @@ app.get('/uploads/:name', (req, res, next) => {
 });
 
 app.use('/admin', require('./routes/admin'));
-app.use('/', require('./routes/public'));
+const publicRouter = require('./routes/public');
+// English di /en/... memakai path English (/en/about); di-rewrite ke path internal Indonesia sebelum router
+app.use('/en', (req, res, next) => {
+  req.lang = 'en'; req.url = i18n.enToId(req.url === '' ? '/' : req.url); next();
+}, publicRouter);
+app.use('/', (req, res, next) => { req.lang = 'id'; next(); }, publicRouter);
 
+function errorLocals(req, extra) {
+  const lang = i18n.langOf(req); const l = i18n.locals(lang); const st = { ...settings() };
+  if (lang === 'en') for (const k of Object.keys(st)) if (k.endsWith('_en') && st[k]) st[k.slice(0, -3)] = st[k];
+  const p = lang === 'en' ? i18n.enToId(req.path.replace(/^\/en/, '') || '/') : req.path;
+  return { ...l, st, navLines: [], footerOffices: [], U, toEn: i18n.toEn, preview: false, baseUrl: config.baseUrl, csrfInput: () => '', CAT_NEWS: {}, meta: { title: extra.title, description: '', noindex: true, path: p, image: '/img/og-default.jpg' }, ...extra };
+}
 app.use((req, res) => {
-  res.status(404).render('public/error', { title: 'Halaman tidak ditemukan', message: 'Halaman yang Anda cari tidak tersedia atau telah dipindahkan.', code: 404, st: settings(), navLines: [], footerOffices: [], U, meta: { title: 'Tidak ditemukan', description: '', noindex: true, path: req.path, image: '/img/og-default.jpg' }, preview: false, lang: 'id', baseUrl: config.baseUrl });
+  const l = i18n.locals(i18n.langOf(req));
+  res.status(404).render('public/error', errorLocals(req, { title: l.__('Halaman tidak ditemukan'), message: l.__('Halaman yang Anda cari tidak tersedia atau telah dipindahkan.'), code: 404 }));
 });
 // eslint-disable-next-line no-unused-vars
 app.use((err, req, res, next) => {
   console.error('[error]', err);
   if (res.headersSent) return;
   const admin = req.path.startsWith('/admin');
-  res.status(500).render(admin ? 'admin/error' : 'public/error', { title: 'Terjadi kesalahan', message: 'Terjadi kesalahan pada server. Silakan coba lagi.', code: 500, st: settings(), navLines: [], footerOffices: [], U, meta: { title: 'Kesalahan', description: '', noindex: true, path: req.path, image: '/img/og-default.jpg' }, preview: false, lang: 'id', baseUrl: config.baseUrl });
+  const l = i18n.locals(i18n.langOf(req));
+  res.status(500).render(admin ? 'admin/error' : 'public/error', errorLocals(req, { title: admin ? 'Terjadi kesalahan' : l.__('Terjadi kesalahan'), message: admin ? 'Terjadi kesalahan pada server. Silakan coba lagi.' : l.__('Terjadi kesalahan pada server. Silakan coba lagi.'), code: 500 }));
 });
 
 // Retensi pesan masuk (Assessment A#10): hapus pesan lebih lama dari masa simpan, dicek tiap jam

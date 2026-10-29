@@ -20,11 +20,23 @@ npm test                     # tes end-to-end (database sementara)
 Docker: `docker compose up -d --build` (data di volume `dic-data`). Letakkan Caddy/Nginx HTTPS di depan port 3000 dan set `TRUST_PROXY=1`.
 Backup: salin `DB_PATH` (SQLite, gunakan `sqlite3 dic.db ".backup out.db"`) dan folder `UPLOAD_DIR`.
 
+## Bahasa (Indonesia dan English)
+
+Bahasa Indonesia di root (`/`), English di `/en` dengan path English (`/en/about`, `/en/business-lines`, `/en/news`, `/en/contact`,
+`/en/downloads`, `/en/privacy-policy`). Switcher ID/EN ada di top bar, setiap halaman memuat `hreflang`, dan `sitemap.xml` memuat kedua bahasa.
+
+- Konten CMS: setiap field teks memiliki padanan **(English)** tepat di bawahnya (kolom `*_en`). Bila field English kosong, halaman EN menampilkan versi Indonesia.
+- Pengaturan situs (tagline, visi, misi, jam layanan, autoresponse, dan lain-lain) juga memiliki versi English.
+- Teks UI Indonesia memakai istilah English tanpa diterjemahkan (mis. Company Profile, Trading, Rental & Support, Loading & Hauling, Drilling Services). Kamus UI ada di `src/i18n.js`.
+- Form kontak menyimpan bahasa pengirim: validasi, halaman sukses, dan autoresponse mengikuti bahasa tersebut. Notifikasi ke PIC tetap Bahasa Indonesia.
+- Terjemahan English konten seed ada di `src/seed-en.js` (hanya mengisi kolom kosong, tidak menimpa suntingan). Naskah English wajib ditinjau DIC bersama naskah Indonesia sebelum launch (A#16).
+- Antarmuka CMS tetap Bahasa Indonesia.
+
 ## Sitemap (Assessment A#5)
 
 `/` Beranda, `/tentang` (profil, visi dan misi, roadmap, rekam jejak, kantor), `/lini-bisnis` dan `/lini-bisnis/:slug`,
 `/berita` dan `/berita/:slug` (kategori, halaman), `/kontak`, plus `/cari`, `/unduhan`, `/kebijakan-privasi`, `/sitemap.xml`, `/robots.txt`.
-Bahasa Indonesia saat launch; English fase berikut (A#16).
+Alamat jalan kantor tidak diterjemahkan.
 
 ## CMS
 
@@ -78,5 +90,6 @@ tidak dapat diakses langsung, CSV dinetralkan dari formula injection, log audit.
 
 - SQLite untuk satu instance; untuk HA/replika pindahkan ke PostgreSQL.
 - Tidak ada riwayat revisi per konten (hanya log aktivitas). Editor yang mengubah konten tayang membuatnya offline sampai direview.
+- Alamat kantor tidak memiliki versi English; URL slug berasal dari judul Indonesia dan dipakai bersama kedua bahasa.
 - Mesin pencari memakai `LIKE`, cukup untuk volume konten kecil.
 - Target Lighthouse (90/85) belum diukur; metode uji disepakati saat UAT (sheet 03).

@@ -2,40 +2,40 @@
 <body>
 <%- include('../partials/header') %>
 <main id="konten">
-<section class="page-hero"><div class="wrap"><nav class="crumb" aria-label="Breadcrumb"><a href="/">Beranda</a> / Kontak</nav><h1>Kontak</h1><p class="lead">Sampaikan kebutuhan atau pertanyaan Anda. Kami menindaklanjuti dalam <%= st.response_target %> (<%= st.service_hours %>).</p></div></section>
+<section class="page-hero"><div class="wrap"><nav class="crumb" aria-label="<%= __('Breadcrumb') %>"><a href="<%= u('/') %>"><%= __("Beranda") %></a> / <%= __("Kontak") %></nav><h1><%= __("Kontak") %></h1><p class="lead"><%= __("Sampaikan kebutuhan atau pertanyaan Anda. Kami menindaklanjuti dalam") %> <%= st.response_target %> (<%= st.service_hours %>).</p></div></section>
 <section class="section"><div class="wrap two top">
   <div>
-    <% if (sent) { %><div class="alert ok" role="status"><strong>Pesan terkirim.</strong> <%= st.success_message %></div><% } %>
-    <form method="post" action="/kontak" class="form card pad" novalidate id="contact-form">
+    <% if (sent) { %><div class="alert ok" role="status"><strong><%= __("Pesan terkirim.") %></strong> <%= st.success_message %></div><% } %>
+    <form method="post" action="<%= u('/kontak') %>" class="form card pad" novalidate id="contact-form">
       <%- csrfInput() %>
-      <div class="hp" aria-hidden="true"><label>Website <input name="website" tabindex="-1" autocomplete="off"></label></div>
+      <div class="hp" aria-hidden="true"><label><%= __("Website") %> <input name="website" tabindex="-1" autocomplete="off"></label></div>
       <div class="row2">
-        <div class="field <%= errors.name ? 'err' : '' %>"><label for="c-name">Nama *</label><input id="c-name" name="name" value="<%= values.name || '' %>" required maxlength="100" autocomplete="name"><% if (errors.name) { %><small><%= errors.name %></small><% } %></div>
-        <div class="field <%= errors.org ? 'err' : '' %>"><label for="c-org">Instansi *</label><input id="c-org" name="org" value="<%= values.org || '' %>" required maxlength="120" autocomplete="organization"><% if (errors.org) { %><small><%= errors.org %></small><% } %></div>
+        <div class="field <%= errors.name ? 'err' : '' %>"><label for="c-name"><%= __("Nama *") %></label><input id="c-name" name="name" value="<%= values.name || '' %>" required maxlength="100" autocomplete="name"><% if (errors.name) { %><small><%= errors.name %></small><% } %></div>
+        <div class="field <%= errors.org ? 'err' : '' %>"><label for="c-org"><%= __("Instansi *") %></label><input id="c-org" name="org" value="<%= values.org || '' %>" required maxlength="120" autocomplete="organization"><% if (errors.org) { %><small><%= errors.org %></small><% } %></div>
       </div>
       <div class="row2">
-        <div class="field <%= errors.email ? 'err' : '' %>"><label for="c-email">Email *</label><input id="c-email" type="email" name="email" value="<%= values.email || '' %>" required maxlength="120" autocomplete="email"><% if (errors.email) { %><small><%= errors.email %></small><% } %></div>
-        <div class="field <%= errors.phone ? 'err' : '' %>"><label for="c-phone">Telepon (opsional)</label><input id="c-phone" type="tel" name="phone" value="<%= values.phone || '' %>" maxlength="30" autocomplete="tel"><% if (errors.phone) { %><small><%= errors.phone %></small><% } %></div>
+        <div class="field <%= errors.email ? 'err' : '' %>"><label for="c-email"><%= __("Email *") %></label><input id="c-email" type="email" name="email" value="<%= values.email || '' %>" required maxlength="120" autocomplete="email"><% if (errors.email) { %><small><%= errors.email %></small><% } %></div>
+        <div class="field <%= errors.phone ? 'err' : '' %>"><label for="c-phone"><%= __("Telepon (opsional)") %></label><input id="c-phone" type="tel" name="phone" value="<%= values.phone || '' %>" maxlength="30" autocomplete="tel"><% if (errors.phone) { %><small><%= errors.phone %></small><% } %></div>
       </div>
-      <div class="field <%= errors.category ? 'err' : '' %>"><label for="c-cat">Keperluan *</label>
-        <select id="c-cat" name="category" required><option value="">Pilih keperluan</option><% Object.entries(cats).forEach(([k, v]) => { %><option value="<%= k %>" <%= values.category === k ? 'selected' : '' %>><%= v %></option><% }) %></select><% if (errors.category) { %><small><%= errors.category %></small><% } %></div>
-      <div class="field <%= errors.message ? 'err' : '' %>"><label for="c-msg">Pesan *</label><textarea id="c-msg" name="message" rows="6" required maxlength="4000"><%= values.message || '' %></textarea><% if (errors.message) { %><small><%= errors.message %></small><% } %></div>
-      <div class="field check <%= errors.consent ? 'err' : '' %>"><label><input type="checkbox" name="consent" value="1" <%= values.consent ? 'checked' : '' %> required> Saya menyetujui data ini diproses sesuai <a href="/kebijakan-privasi" target="_blank" rel="noopener">Kebijakan Privasi</a>.</label><% if (errors.consent) { %><small><%= errors.consent %></small><% } %></div>
-      <button class="btn btn-primary btn-lg" data-event="submit_contact">Kirim Pesan</button>
+      <div class="field <%= errors.category ? 'err' : '' %>"><label for="c-cat"><%= __("Keperluan *") %></label>
+        <select id="c-cat" name="category" required><option value=""><%= __("Pilih keperluan") %></option><% Object.entries(cats).forEach(([k, v]) => { %><option value="<%= k %>" <%= values.category === k ? 'selected' : '' %>><%= v %></option><% }) %></select><% if (errors.category) { %><small><%= errors.category %></small><% } %></div>
+      <div class="field <%= errors.message ? 'err' : '' %>"><label for="c-msg"><%= __("Pesan *") %></label><textarea id="c-msg" name="message" rows="6" required maxlength="4000"><%= values.message || '' %></textarea><% if (errors.message) { %><small><%= errors.message %></small><% } %></div>
+      <div class="field check <%= errors.consent ? 'err' : '' %>"><label><input type="checkbox" name="consent" value="1" <%= values.consent ? 'checked' : '' %> required> <%= __("Saya menyetujui data ini diproses sesuai") %> <a href="<%= u('/kebijakan-privasi') %>" target="_blank" rel="noopener"><%= __("Kebijakan Privasi") %></a>.</label><% if (errors.consent) { %><small><%= errors.consent %></small><% } %></div>
+      <button class="btn btn-primary btn-lg" data-event="submit_contact"><%= __("Kirim Pesan") %></button>
     </form>
   </div>
   <aside>
-    <% offices.forEach(o => { %><article class="card pad office"><span class="chip"><%= o.type === 'pusat' ? 'Kantor Pusat' : 'Cabang' %></span><h3><%= o.name %></h3>
+    <% offices.forEach(o => { %><article class="card pad office"><span class="chip"><%= o.type === 'pusat' ? __('Kantor Pusat') : __('Cabang') %></span><h3><%= c(o,'name') %></h3>
       <p><%- U.esc(o.address).replace(/\n/g, '<br>') %></p>
-      <% if (U.safeUrl(o.map_url)) { %><a class="btn btn-link" href="<%= U.safeUrl(o.map_url) %>" target="_blank" rel="noopener"><%- icon('pin','sm') %> Lihat di peta</a><% } %></article><% }) %>
-    <div class="card pad office"><h3>Kontak langsung</h3>
+      <% if (U.safeUrl(o.map_url)) { %><a class="btn btn-link" href="<%= U.safeUrl(o.map_url) %>" target="_blank" rel="noopener"><%- icon('pin','sm') %> <%= __("Lihat di peta") %></a><% } %></article><% }) %>
+    <div class="card pad office"><h3><%= __("Kontak langsung") %></h3>
       <p><%- icon('mail','sm') %> <a href="mailto:<%= st.public_email %>" data-event="click_email"><%= st.public_email %></a></p>
       <p><%- icon('phone','sm') %> <a href="tel:<%= (st.public_phone||'').replace(/[^+\d]/g,'') %>"><%= st.public_phone %></a></p>
       <p><%- icon('clock','sm') %> <%= st.service_hours %></p>
       <% if (st.whatsapp_number) { %><a class="btn btn-wa" href="https://wa.me/<%= st.whatsapp_number.replace(/\D/g,'') %>" target="_blank" rel="noopener" data-event="click_whatsapp"><%- icon('whatsapp') %> WhatsApp</a><% } %></div>
   </aside>
 </div>
-<% if (st.map_embed_url) { %><div class="wrap map"><iframe src="<%= st.map_embed_url %>" title="Peta kantor pusat" loading="lazy" referrerpolicy="no-referrer-when-downgrade"></iframe></div><% } %>
+<% if (st.map_embed_url) { %><div class="wrap map"><iframe src="<%= st.map_embed_url %>" title="<%= __('Peta kantor pusat') %>" loading="lazy" referrerpolicy="no-referrer-when-downgrade"></iframe></div><% } %>
 </section>
 </main>
 <%- include('../partials/footer') %>

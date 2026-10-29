@@ -2,12 +2,12 @@
 <body>
 <%- include('../partials/header') %>
 <main id="konten">
-<section class="page-hero"><div class="wrap"><nav class="crumb" aria-label="Breadcrumb"><a href="/">Beranda</a> / Berita</nav><h1>Berita</h1></div></section>
+<section class="page-hero"><div class="wrap"><nav class="crumb" aria-label="<%= __('Breadcrumb') %>"><a href="<%= u('/') %>"><%= __("Beranda") %></a> / <%= __("Berita") %></nav><h1><%= __("Berita") %></h1></div></section>
 <section class="section"><div class="wrap">
-  <div class="filters" role="tablist"><a href="/berita" class="<%= !cat ? 'on' : '' %>">Semua</a><% Object.entries(CAT_NEWS).forEach(([k, v]) => { %><a href="/berita?kategori=<%= k %>" class="<%= cat === k ? 'on' : '' %>"><%= v %></a><% }) %></div>
+  <div class="filters" role="tablist"><a href="<%= u('/berita') %>" class="<%= !cat ? 'on' : '' %>"><%= __("Semua") %></a><% Object.entries(CAT_NEWS).forEach(([k, v]) => { %><a href="<%= u('/berita?kategori=' + (k)) %>" class="<%= cat === k ? 'on' : '' %>"><%= v %></a><% }) %></div>
   <% if (posts.length) { %><div class="grid g3"><% posts.forEach(p => { %><%- include('post-card', { p }) %><% }) %></div>
-  <% } else { %><p class="muted">Belum ada berita pada kategori ini.</p><% } %>
-  <% if (pages > 1) { %><nav class="pager" aria-label="Halaman"><% for (let i = 1; i <= pages; i++) { %><a class="<%= i === page ? 'on' : '' %>" href="/berita?<%= cat ? 'kategori=' + cat + '&' : '' %>hal=<%= i %>"><%= i %></a><% } %></nav><% } %>
+  <% } else { %><p class="muted"><%= __("Belum ada berita pada kategori ini.") %></p><% } %>
+  <% if (pages > 1) { %><nav class="pager" aria-label="<%= __('Halaman') %>"><% for (let i = 1; i <= pages; i++) { %><a class="<%= i === page ? 'on' : '' %>" href="<%= u('/berita?' + (cat ? 'kategori=' + cat + '&' : '') + 'hal=' + (i)) %>"><%= i %></a><% } %></nav><% } %>
 </div></section>
 </main>
 <%- include('../partials/footer') %>

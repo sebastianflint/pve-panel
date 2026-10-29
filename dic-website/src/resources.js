@@ -124,5 +124,20 @@ const resources = {
   },
 };
 
+// Field yang memiliki versi English (kolom <nama>_en). Field English disisipkan tepat setelah field Indonesia.
+const TR = {
+  slides: ['title', 'subtitle', 'cta_label'], highlights: ['title', 'body'], 'lini-bisnis': ['title', 'summary', 'items', 'body'],
+  roadmap: ['title'], proyek: ['title', 'service', 'location_public', 'summary'], kantor: ['name'],
+  berita: ['title', 'excerpt', 'body', 'caption'], dokumen: ['title', 'description'], halaman: ['title', 'summary', 'body', 'meta_description'],
+};
+for (const [key, names] of Object.entries(TR)) {
+  const r = resources[key]; const out = [];
+  for (const f of r.fields) {
+    out.push(f);
+    if (names.includes(f.name)) out.push({ ...f, name: f.name + '_en', label: f.label.replace(/\s*\(.*\)$/, '') + ' (English)', required: false, help: undefined, default: undefined, isEn: true });
+  }
+  r.fields = out; r.trFields = names;
+}
+
 const STATUS = { draft: 'Draft', review: 'Menunggu review', published: 'Tayang' };
 module.exports = { resources, STATUS, ICONS };

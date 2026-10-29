@@ -3,6 +3,7 @@ const nodemailer = require('nodemailer');
 const config = require('../config');
 const { settings } = require('../db');
 const { esc } = require('./util');
+const i18n = require('../i18n');
 
 let transport = null;
 const configured = () => !!config.smtp.host;
@@ -53,11 +54,13 @@ async function notifySubmission(s) {
 async function autoresponse(s) {
   const st = settings();
   if (st.autoresponse_enabled === '0') return { status: 'skipped' };
-  const body = esc(st.autoresponse_body || 'Terima kasih telah menghubungi kami. Pesan Anda sudah kami terima dan akan ditindaklanjuti.').replace(/\n/g, '<br>');
+  const en = s.lang === 'en';
+  const raw = (en && st.autoresponse_body_en) || st.autoresponse_body || 'Terima kasih telah menghubungi kami. Pesan Anda sudah kami terima dan akan ditindaklanjuti.';
+  const __ = i18n.locals(s.lang).__;
   return send({
-    to: s.email, subject: 'Pesan Anda telah kami terima - PT Dahana Investama Corp',
-    html: `<p>Yth. ${esc(s.name)},</p><p>${body}</p><p>Hormat kami,<br>PT Dahana Investama Corp</p>`,
-    text: `Yth. ${s.name},\n\n${st.autoresponse_body || ''}\n\nPT Dahana Investama Corp`,
+    to: s.email, subject: __('Pesan Anda telah kami terima - PT Dahana Investama Corp'),
+    html: `<p>${__('Yth.')} ${esc(s.name)},</p><p>${esc(raw).replace(/\n/g, '<br>')}</p><p>${__('Hormat kami,')}<br>PT Dahana Investama Corp</p>`,
+    text: `${__('Yth.')} ${s.name},\n\n${raw}\n\n${__('Hormat kami,')}\nPT Dahana Investama Corp`,
   });
 }
 module.exports = { send, configured, notifySubmission, autoresponse, CATEGORIES };

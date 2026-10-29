@@ -143,3 +143,37 @@ test('dokumen: unduhan langsung dan via form', async () => {
   assert.equal(r.status, 302);
   assert.equal((await c.req(r.headers.get('location'))).status, 200);
 });
+
+test('bilingual: halaman English, switcher, hreflang, dan form berbahasa English', async () => {
+  const c = new Client();
+  const en = await c.text('/en');
+  assert.equal(en.r.status, 200);
+  assert.match(en.t, /<html lang="en">/);
+  assert.match(en.t, /A Procurement Partner for Industry/);
+  assert.match(en.t, /href="\/en\/business-lines\/konstruksi"/, 'tautan memakai path English');
+  assert.match(en.t, /hreflang="id" href="http:\/\/127\.0\.0\.1"/);
+  assert.doesNotMatch(en.t, /Hubungi Kami|Tentang Kami|Selengkapnya/, 'tidak ada UI Indonesia di halaman EN');
+  const id = await c.text('/');
+  assert.match(id.t, /<html lang="id">/);
+  assert.match(id.t, /href="\/en" hreflang="en"/, 'switcher ke EN');
+  const about = await c.text('/en/about');
+  assert.match(about.t, /Business Roadmap/); assert.match(about.t, /Achieved/);
+  assert.match(about.t, /href="\/tentang" hreflang="id"/, 'switcher kembali ke path Indonesia');
+  const line = await c.text('/en/business-lines/angkutan-logistik');
+  assert.match(line.t, /Transportation and Logistics/); assert.match(line.t, /Air: scheduled and non-scheduled/);
+  assert.match((await c.text('/en/news/mengenal-pt-dahana-investama-corp')).t, /Get to Know PT Dahana/);
+  assert.match((await c.text('/en/search?q=cargo')).t, /Transportation and Logistics/, 'pencarian mencakup konten English');
+  assert.match((await c.text('/sitemap.xml')).t, /hreflang="en" href="http:\/\/127\.0\.0\.1\/en\/business-lines\/konstruksi"/);
+  const nf = await c.text('/en/nope'); assert.equal(nf.r.status, 404); assert.match(nf.t, /Page not found/);
+
+  // form English: pesan validasi dan kolom lang tersimpan
+  await c.text('/en/contact');
+  await new Promise((r) => setTimeout(r, 3100));
+  const bad = await c.post('/en/contact', { name: '', org: '', email: 'x', category: '', message: 'short' }, '/en/contact');
+  assert.equal(bad.status, 422);
+  const badHtml = await bad.text(); assert.match(badHtml, /Name is required\./);
+  const ok = await c.post('/en/contact', { name: 'Jane', org: 'Acme', email: 'jane@example.com', category: 'info_lini', message: 'We would like to know more about logistics.', consent: '1' }, '/en/contact');
+  assert.equal(ok.status, 302); assert.equal(ok.headers.get('location'), '/en/contact?terkirim=1');
+  assert.equal(db.prepare("SELECT lang FROM submissions WHERE email='jane@example.com'").get().lang, 'en');
+  assert.match((await c.text('/en/contact?terkirim=1')).t, /Message sent\./);
+});

@@ -1,6 +1,6 @@
 'use strict';
 // Pengaturan situs yang dapat diubah Admin. `group` mengelompokkan form.
-module.exports = [
+const defs = [
   { group: 'Identitas', name: 'site_name', label: 'Nama perusahaan', type: 'text', default: 'PT Dahana Investama Corp' },
   { group: 'Identitas', name: 'site_short', label: 'Singkatan merek', type: 'text', default: 'DIC' },
   { group: 'Identitas', name: 'tagline', label: 'Kalimat posisi (hero, meta description)', type: 'textarea', default: 'Mitra pengadaan barang dan jasa untuk sektor pertambangan, konstruksi, dan industri, dengan keahlian khusus pada logistik dan pengelolaan bahan peledak.', help: 'Usulan SINUX, wajib disetujui Direksi (A#4).' },
@@ -26,3 +26,23 @@ module.exports = [
   { group: 'Pengukuran dan SEO', name: 'launch_ready', label: 'Situs siap tayang (izinkan mesin pencari mengindeks)', type: 'bool', default: '0', help: 'Biarkan nonaktif sampai seluruh konten dan izin publikasi disetujui DIC. Saat nonaktif situs mengirim noindex.' },
   { group: 'Halaman Privasi', name: 'cookie_notice', label: 'Teks banner cookie', type: 'textarea', default: 'Kami memakai cookie analitik untuk memahami penggunaan website. Anda dapat menolak tanpa mengurangi akses ke konten.' },
 ];
+
+// Pengaturan yang tampil dua bahasa: sisipkan versi English (name_en) tepat setelah versi Indonesia.
+const EN_DEFAULT = {
+  tagline: 'A partner for procurement of goods and services in the mining, construction, and industrial sectors, with specialist expertise in logistics and explosives management.',
+  about_intro: 'PT Dahana Investama Corp. is a provider of procurement of goods and services, dedicated to delivering the best, most trusted, and innovative solutions. We are here to foster self-reliance and create sustainable value for every client and strategic partner.',
+  sectors: 'Mining\nConstruction\nGeneral Trading',
+  visi: 'To be the best and most trusted provider of procurement of goods and services, delivering solutions towards self-reliance and sustainability.',
+  misi: 'Deliver professional, high-quality services focused on client needs and sustainable results.\nDevelop innovative solutions that foster the self-reliance of individuals, communities, and organizations.\nBuild strategic partnerships with various parties to widen the positive impact of our services.\nStrengthen internal capacity through continuous training and the development of outstanding human resources.\nUphold integrity, social responsibility, and sustainability in every aspect of the company operations.',
+  roadmap_intro: 'We have a measured growth plan to become a market leader in the future.',
+  service_hours: 'Monday - Friday, 08:00 - 17:00 WIB (UTC+7)', response_target: '2 business days',
+  autoresponse_body: 'Thank you for contacting PT Dahana Investama Corp. We have received your message and our team will follow up within 2 business days.',
+  success_message: 'Thank you. We have received your message and will follow up within 2 business days.',
+  cookie_notice: 'We use analytics cookies to understand how the website is used. You may decline without affecting your access to the content.',
+};
+const out = [];
+for (const d of defs) {
+  out.push(d);
+  if (EN_DEFAULT[d.name] !== undefined) out.push({ ...d, name: d.name + '_en', label: d.label.replace(/\s*\(.*\)$/, '') + ' (English)', group: d.group, default: EN_DEFAULT[d.name], help: undefined });
+}
+module.exports = out;

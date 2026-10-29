@@ -5,6 +5,6 @@
   <p class="eyebrow"><%= code || '' %></p>
   <h1><%= title %></h1>
   <p class="lead"><%= message %></p>
-  <p><a class="btn btn-primary" href="/">Kembali ke Beranda</a></p>
+  <p><a class="btn btn-primary" href="<%= u('/') %>"><%= __("Kembali ke Beranda") %></a></p>
 </main>
 <%- include('../partials/footer') %>

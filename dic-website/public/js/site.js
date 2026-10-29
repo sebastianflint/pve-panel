@@ -3,7 +3,7 @@
   // Menu mobile
   var tg = document.querySelector('.nav-toggle'), menu = document.getElementById('menu');
   if (tg && menu) tg.addEventListener('click', function () {
-    var o = menu.classList.toggle('open'); tg.setAttribute('aria-expanded', o); tg.setAttribute('aria-label', o ? 'Tutup menu' : 'Buka menu');
+    var o = menu.classList.toggle('open'); tg.setAttribute('aria-expanded', o); tg.setAttribute('aria-label', tg.getAttribute(o ? 'data-label-close' : 'data-label-open'));
   });
 
   // Hero carousel (berhenti otomatis bila pengguna memilih reduced motion)
@@ -18,7 +18,7 @@
     var loop = function () { clearInterval(t); if (!paused) t = setInterval(function () { show(i + 1); }, 6500); };
     dots.forEach(function (d) { d.addEventListener('click', function () { show(+d.dataset.goto); loop(); }); });
     var pp = document.querySelector('[data-pause]');
-    if (pp) pp.addEventListener('click', function () { paused = !paused; pp.textContent = paused ? '▶' : 'II'; pp.setAttribute('aria-label', paused ? 'Putar slide' : 'Jeda slide'); loop(); });
+    if (pp) pp.addEventListener('click', function () { paused = !paused; pp.textContent = paused ? '▶' : 'II'; pp.setAttribute('aria-label', pp.getAttribute(paused ? 'data-play-label' : 'data-pause-label')); loop(); });
     loop();
   }
 

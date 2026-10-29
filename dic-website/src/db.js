@@ -74,6 +74,14 @@ CREATE INDEX IF NOT EXISTS idx_posts_pub ON posts(status, published_at);
 CREATE INDEX IF NOT EXISTS idx_sub_created ON submissions(created_at);
 `);
 
+// Migrasi ringan: kolom English (<nama>_en) untuk konten CMS dan kolom lang pada submissions
+(function migrate() {
+  const { resources } = require('./resources');
+  const has = (t, c) => db.prepare(`PRAGMA table_info(${t})`).all().some((x) => x.name === c);
+  for (const r of Object.values(resources)) for (const f of r.trFields || []) if (!has(r.table, f + '_en')) db.exec(`ALTER TABLE ${r.table} ADD COLUMN ${f}_en TEXT`);
+  if (!has('submissions', 'lang')) db.exec("ALTER TABLE submissions ADD COLUMN lang TEXT NOT NULL DEFAULT 'id'");
+})();
+
 // Kondisi tayang publik: status published dan jadwal sudah lewat
 const LIVE = `status = 'published' AND (publish_at IS NULL OR publish_at <= datetime('now'))`;
 
