@@ -8,7 +8,7 @@
 *{box-sizing:border-box}
 html{scroll-behavior:smooth}
 body{margin:0;font-family:"Inter Variable",Inter,system-ui,-apple-system,"Segoe UI",sans-serif;color:var(--ink);background:var(--bg);line-height:1.65;font-size:16px}
-img{max-width:100%;display:block}
+img{max-width:100%;height:auto;display:block}
 a{color:var(--teal-d)}
 h1,h2,h3{line-height:1.2;color:var(--ink);letter-spacing:-.01em;margin:.2em 0 .5em}
 h1{font-size:clamp(2rem,4.5vw,3.2rem)} h2{font-size:clamp(1.6rem,3vw,2.2rem)} h3{font-size:1.15rem} h2.h3{font-size:1.3rem}
@@ -35,7 +35,7 @@ h1{font-size:clamp(2rem,4.5vw,3.2rem)} h2{font-size:clamp(1.6rem,3vw,2.2rem)} h3
 .btn-ghost{background:transparent;border-color:var(--line);color:var(--ink)}
 .btn-link{padding-inline:6px;color:var(--teal-d)}.btn-link:hover{text-decoration:underline}
 .btn-light{background:#fff;color:var(--green-d)}.btn-light:hover{background:var(--orange);color:#201400}
-.btn-wa{background:#1f9d55;color:#fff;margin-top:8px}
+.btn-wa{background:#146c35;color:#fff;margin-top:8px}
 /* header */
 .topbar{background:var(--green);color:#e8f3ec;font-size:.82rem}.topbar .wrap{display:flex;justify-content:space-between;gap:12px;padding:6px 0}
 .topbar a{color:#fff;text-decoration:none;margin-left:16px}.topbar-links{display:flex;align-items:center}.lang{margin-left:16px;display:inline-flex;border:1px solid rgba(255,255,255,.5);border-radius:6px;overflow:hidden;font-weight:700}.topbar .lang a{margin:0;padding:0 8px;color:#fff}.topbar .lang a.cur{background:#fff;color:var(--green-d)}
@@ -130,3 +130,5 @@ h1{font-size:clamp(2rem,4.5vw,3.2rem)} h2{font-size:clamp(1.6rem,3vw,2.2rem)} h3
 @media(prefers-reduced-motion:reduce){*{transition:none!important;scroll-behavior:auto!important}}
 .menu a.btn-primary{color:#fff;padding:11px 22px}.menu a.btn-primary:hover{background:var(--green-d);color:#fff}
 @media(prefers-color-scheme:dark){.menu a.btn-primary,.menu a.btn-primary:hover{color:#08231b}}
+.menu a{white-space:nowrap}
+@media(min-width:1021px) and (max-width:1280px){.search input{width:96px}.brand-text small{display:none}.menu{gap:10px}.menu a{padding:10px 9px}}

@@ -8,6 +8,7 @@ const config = require('./config');
 const { db, settings } = require('./db');
 const { loadUser, csrfToken } = require('./lib/auth');
 const icon = require('./lib/icons');
+const { imgAttrs } = require('./lib/img');
 const U = require('./lib/util');
 const i18n = require('./i18n');
 
@@ -52,7 +53,9 @@ app.use((req, res, next) => {
 });
 app.use(loadUser);
 app.use((req, res, next) => {
-  res.locals.icon = icon;
+  res.locals.sandbox = process.env.SANDBOX === '1';
+  res.locals.sandboxBanner = res.locals.sandbox && process.env.SANDBOX_BANNER !== '0';
+  res.locals.icon = icon; res.locals.imgAttrs = imgAttrs;
   res.locals.csrfInput = () => `<input type="hidden" name="_csrf" value="${csrfToken(req)}">`;
   res.locals.asset = (p) => p + '?v=' + (app.locals.assetVersion || '1');
   next();

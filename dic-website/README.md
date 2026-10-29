@@ -1,95 +1,48 @@
-# Website dan CMS dic.id (PT Dahana Investama Corp)
+# dic.id
 
-Website company profile dengan CMS, dibangun di Node.js (Express, EJS, SQLite). Struktur dan alur mengikuti
-*Website Assessment dan Requirements v1.0* serta *DIC Company Profile 03b*. Referensi tata letak: pertamina.com
-(top bar utilitas, menu dengan submenu, hero carousel, kartu lini bisnis, berita, footer multi-kolom, pencarian).
-Warna dan motif mengikuti compro DIC (teal `#4DC2A9`, kuning-oranye `#F9A70D`, hijau tua `#305E3F`, font Inter).
+Website company profile dan CMS untuk **PT Dahana Investama Corp (DIC)**, dibangun dengan Node.js (Express, EJS, SQLite).
+Dua bahasa (Indonesia di `/`, English di `/en`), CMS dengan workflow review, form kontak dengan inbox, dan sandbox untuk simulasi.
 
-Klasifikasi: **RESTRICTED** (berisi rencana implementasi internal).
+Klasifikasi dokumen: **RESTRICTED**. Referensi tata letak: pertamina.com. Identitas visual: DIC Company Profile 03b.
 
-## Menjalankan
+## Mulai cepat
 
-```bash
-cp example.env .env          # isi SESSION_SECRET, SMTP_*, ADMIN_*
-npm install
-npm run seed                 # membuat admin pertama dan konten awal dari compro (idempotent)
-npm start                    # http://localhost:3000, CMS di /admin
-npm test                     # tes end-to-end (database sementara)
+| Tujuan | Perintah | Hasil |
+|---|---|---|
+| Mencoba semua fitur dengan data demo | `npm ci && npm run sandbox` | http://localhost:3100, akun per peran dicetak di terminal |
+| Simulasi otomatis (persona, keamanan, aksesibilitas) | `npx playwright install chromium && npm run simulate` | `sandbox-report/report.md` dan screenshot |
+| Menjalankan tes | `npm test` | 6 tes end-to-end dengan database sementara |
+| Pengembangan lokal | `cp example.env .env && npm run seed && npm run dev` | http://localhost:3000, CMS di `/admin` |
+| Produksi dengan Docker | `docker compose up -d --build` | lihat [docs/INSTALL.md](docs/INSTALL.md) |
+
+## Dokumentasi
+
+| Dokumen | Isi |
+|---|---|
+| [docs/INSTALL.md](docs/INSTALL.md) | Prasyarat, instalasi Docker dan native, HTTPS, konfigurasi, verifikasi, upgrade, rollback, troubleshooting |
+| [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | HLD dan LLD: komponen, alur request, data model, keamanan, bahasa, topologi deployment |
+| [docs/OPERATIONS.md](docs/OPERATIONS.md) | Runbook harian sampai bulanan, user management, backup, patching, penanganan insiden |
+| [docs/SANDBOX.md](docs/SANDBOX.md) | Sandbox lokal, Docker, Codespaces, dan GitHub Actions; cakupan simulasi |
+| [docs/GO-LIVE-CHECKLIST.md](docs/GO-LIVE-CHECKLIST.md) | Konten yang menunggu validasi DIC, UAT, cutover, sign-off, hasil Lighthouse |
+| [docs/design/DESIGN.md](docs/design/DESIGN.md) dan [mockup.html](docs/design/mockup.html) | Design system dan papan mockup |
+| [SECURITY.md](SECURITY.md) | Kontrol keamanan dan cara melaporkan kerentanan |
+
+## Struktur repo
+
+```
+src/            server, routes (public, admin), CMS resources, i18n, mail, seed, sandbox
+views/          template EJS (public, admin, partials)
+public/         CSS, JS, gambar (dengan varian responsif WebP)
+seed/           company-profile.pdf untuk konten awal
+scripts/        simulate.js (simulasi), check-syntax.js, make-variants.js
+test/           tes end-to-end (node:test)
+deploy/         Caddyfile, nginx.conf, systemd unit, backup.sh, restore.sh
+docs/           dokumentasi dan mockup
+.github/        workflow CI, Sandbox, CodeQL, Dependabot
 ```
 
-Docker: `docker compose up -d --build` (data di volume `dic-data`). Letakkan Caddy/Nginx HTTPS di depan port 3000 dan set `TRUST_PROXY=1`.
-Backup: salin `DB_PATH` (SQLite, gunakan `sqlite3 dic.db ".backup out.db"`) dan folder `UPLOAD_DIR`.
+## Status konten
 
-## Bahasa (Indonesia dan English)
-
-Bahasa Indonesia di root (`/`), English di `/en` dengan path English (`/en/about`, `/en/business-lines`, `/en/news`, `/en/contact`,
-`/en/downloads`, `/en/privacy-policy`). Switcher ID/EN ada di top bar, setiap halaman memuat `hreflang`, dan `sitemap.xml` memuat kedua bahasa.
-
-- Konten CMS: setiap field teks memiliki padanan **(English)** tepat di bawahnya (kolom `*_en`). Bila field English kosong, halaman EN menampilkan versi Indonesia.
-- Pengaturan situs (tagline, visi, misi, jam layanan, autoresponse, dan lain-lain) juga memiliki versi English.
-- Teks UI Indonesia memakai istilah English tanpa diterjemahkan (mis. Company Profile, Trading, Rental & Support, Loading & Hauling, Drilling Services). Kamus UI ada di `src/i18n.js`.
-- Form kontak menyimpan bahasa pengirim: validasi, halaman sukses, dan autoresponse mengikuti bahasa tersebut. Notifikasi ke PIC tetap Bahasa Indonesia.
-- Terjemahan English konten seed ada di `src/seed-en.js` (hanya mengisi kolom kosong, tidak menimpa suntingan). Naskah English wajib ditinjau DIC bersama naskah Indonesia sebelum launch (A#16).
-- Antarmuka CMS tetap Bahasa Indonesia.
-
-## Sitemap (Assessment A#5)
-
-`/` Beranda, `/tentang` (profil, visi dan misi, roadmap, rekam jejak, kantor), `/lini-bisnis` dan `/lini-bisnis/:slug`,
-`/berita` dan `/berita/:slug` (kategori, halaman), `/kontak`, plus `/cari`, `/unduhan`, `/kebijakan-privasi`, `/sitemap.xml`, `/robots.txt`.
-Alamat jalan kantor tidak diterjemahkan.
-
-## CMS
-
-| Peran | Hak |
-|---|---|
-| Editor | Membuat dan mengubah konten, mengirim ke review. Tidak dapat menayangkan. Mengubah konten yang sudah tayang mengembalikannya ke antrean review. |
-| Reviewer / Publisher | Semua hak Editor, menayangkan, menarik, menghapus, menjadwalkan tayang. |
-| Admin | Semua hak di atas, pengaturan situs, pengguna, log aktivitas, pesan masuk. |
-
-Alur: Draft, Menunggu review, Tayang (opsional jadwal tayang WIB). Pratinjau memakai `?preview=1` (khusus pengguna login).
-Akses CMS bukan izin publikasi (A#15): persetujuan dicatat DIC melalui email, perubahan status dicatat di Log aktivitas.
-
-Modul: Hero Beranda, Pembeda, Lini Bisnis (label aktif/mitra/rencana), Roadmap (label Terealisasi/Rencana),
-Rekam Jejak (tidak dapat ditayangkan tanpa sumber, tanggal as-of, dan pemberi izin, A#19), Kantor, Berita, Dokumen Unduhan
-(langsung atau via form), Halaman Statis, Pustaka media, Pesan masuk, Pengaturan, Pengguna, Log aktivitas.
-
-### Form kontak dan data (A#8, A#9, A#10, A#27)
-Field: nama, instansi, email, telepon (opsional), kategori, pesan, persetujuan privasi. Disimpan di CMS (akses PIC yang ditandai),
-dikirim ke email tujuan (+CC) dan autoresponse ke pengirim. Bila email gagal, status ditandai dan dapat dikirim ulang.
-Export CSV, hapus manual, hapus otomatis setelah N bulan (default 12). Perlindungan: CSRF, honeypot, waktu minimum, rate limit.
-
-### Analitik dan SEO (A#28)
-Google Analytics dimuat hanya setelah pengunjung menyetujui banner cookie. Event: `cta_hero`, `cta_hubungi_kami`, `click_email`,
-`click_whatsapp`, `submit_contact`, `download_*`. Metadata, Open Graph, JSON-LD (Organization, NewsArticle), `sitemap.xml`.
-Selama pengaturan **Situs siap tayang** nonaktif, situs mengirim `noindex` dan `robots.txt` melarang semua crawler.
-
-## Konten awal dan status validasi
-
-Konten seed berasal dari compro dan sheet *00 Profil DIC* (seluruhnya masih "Belum divalidasi" oleh DIC).
-Butir yang disyaratkan assessment menunggu izin **tidak tayang** (status Menunggu review) sampai disetujui:
-
-| Butir | Alasan | Referensi |
-|---|---|---|
-| Pembeda "Rekam jejak gudang bahan peledak" dan proyek Gudang Handak 2024 | Detail lokasi dan izin klien | A#19 |
-| Roadmap 2025 (badan usaha handak), 2026, 2027 | Izin terbit dan label realisasi/rencana | A#19, A#20 |
-| Lini tambahan Pertambangan dan Industri Pengolahan | Status aktif/rencana, wording handak | A#18, A#19 |
-| Kantor Cabang Samarinda | Alamat di kompleks perumahan | sheet 00 no. 26 |
-
-Placeholder yang wajib diganti sebelum launch: logo (saat ini dipotong dari PDF compro, minta vektor resmi, A#11),
-email resmi `@dic.id` (saat ini Gmail dari compro, A#27), pin peta, foto asli dan izin (A#13), naskah privasi (disetujui Legal, A#29),
-dua artikel berita awal (sebaiknya 3-5 artikel dari Humas, A#22). Foto di `public/img` berasal dari compro; foto resepsionis
-bermerek pihak ketiga sengaja tidak dipakai (A#21).
-
-## Keamanan
-
-Password bcrypt (min. 12 karakter, wajib ganti saat login pertama), rate limit login, sesi cookie bertanda tangan (`httpOnly`, `sameSite`, `secure`),
-CSRF di semua POST, CSP via Helmet, HTML dari editor disaring (sanitize-html), upload dibatasi tipe/ukuran dan nama acak, dokumen "via form"
-tidak dapat diakses langsung, CSV dinetralkan dari formula injection, log audit. `SESSION_SECRET` wajib pada production.
-
-## Batasan yang diketahui
-
-- SQLite untuk satu instance; untuk HA/replika pindahkan ke PostgreSQL.
-- Tidak ada riwayat revisi per konten (hanya log aktivitas). Editor yang mengubah konten tayang membuatnya offline sampai direview.
-- Alamat kantor tidak memiliki versi English; URL slug berasal dari judul Indonesia dan dipakai bersama kedua bahasa.
-- Mesin pencari memakai `LIKE`, cukup untuk volume konten kecil.
-- Target Lighthouse (90/85) belum diukur; metode uji disepakati saat UAT (sheet 03).
+Konten awal berasal dari company profile dan statusnya masih **belum divalidasi DIC**. Butir yang disyaratkan assessment menunggu izin
+(roadmap 2025 sampai 2027, proyek handak, lini Pertambangan dan Industri Pengolahan, Kantor Samarinda) tidak tayang di produksi.
+Situs mengirim `noindex` sampai pengaturan **Situs siap tayang** diaktifkan. Detail di [docs/GO-LIVE-CHECKLIST.md](docs/GO-LIVE-CHECKLIST.md).

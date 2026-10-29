@@ -4,9 +4,9 @@
 <main id="konten">
 <section class="page-hero"><div class="wrap"><nav class="crumb" aria-label="<%= __('Breadcrumb') %>"><a href="<%= u('/') %>"><%= __("Beranda") %></a> / <%= __("Lini Bisnis") %></nav><h1><%= __("Lini Bisnis") %></h1><p class="lead"><%= __("Empat lini utama yang saling melengkapi dalam satu mitra.") %></p></div></section>
 <section class="section"><div class="wrap">
-  <div class="grid g2"><% utama.forEach(l => { %>
+  <h2 class="sr"><%= __('Lini utama') %></h2><div class="grid g2"><% utama.forEach(l => { %>
     <a class="card line wide" href="<%= u('/lini-bisnis/' + (l.slug)) %>">
-      <% if (l.image) { %><img src="<%= l.image %>" alt="" loading="lazy"><% } %>
+      <% if (l.image) { %><img <%- imgAttrs(l.image, '(min-width:980px) 380px, (min-width:620px) 45vw, 92vw') %> alt="" loading="lazy"><% } %>
       <div class="pad"><span class="arch sm"><%- icon(l.icon || 'layers') %></span><h3><%= c(l,'title') %></h3><p><%= c(l,'summary') %></p>
       <ul class="tick"><% U.lines(c(l,'items')).slice(0, 3).forEach(i => { %><li><%= i %></li><% }) %></ul><span class="more"><%= __("Selengkapnya") %> <%- icon('arrow') %></span></div>
     </a><% }) %></div>

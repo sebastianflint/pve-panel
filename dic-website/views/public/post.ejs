@@ -6,7 +6,7 @@
   <span class="chip"><%= CAT_NEWS[post.category] || post.category %></span> <time class="muted" datetime="<%= post.published_at %>"><%= dateL(post.published_at) %></time>
   <h1><%= c(post,'title') %></h1></div></section>
 <article class="section"><div class="wrap narrow-l">
-  <% if (post.image) { %><figure class="photo wide"><img src="<%= post.image %>" alt="<%= c(post,'caption') || c(post,'title') %>"><% if (c(post,'caption') || post.photo_credit) { %><figcaption><%= c(post,'caption') %><%= post.photo_credit ? ' (' + __('Foto:') + ' ' + post.photo_credit + ')' : '' %></figcaption><% } %></figure><% } %>
+  <% if (post.image) { %><figure class="photo wide"><img <%- imgAttrs(post.image, '(min-width:860px) 820px, 92vw') %> alt="<%= c(post,'caption') || c(post,'title') %>"><% if (c(post,'caption') || post.photo_credit) { %><figcaption><%= c(post,'caption') %><%= post.photo_credit ? ' (' + __('Foto:') + ' ' + post.photo_credit + ')' : '' %></figcaption><% } %></figure><% } %>
   <div class="prose"><%- c(post,'body') %></div>
   <p><a class="btn btn-outline" href="<%= u('/berita') %>">&larr; <%= __("Semua berita") %></a></p>
 </div></article>

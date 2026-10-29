@@ -6,7 +6,7 @@
 <section class="hero" aria-roledescription="carousel" aria-label="<%= __('Sorotan') %>">
   <% slides.forEach((s, i) => { %>
   <div class="slide<%= i === 0 ? ' active' : '' %>" data-slide <%- i > 0 ? 'aria-hidden="true"' : '' %>>
-    <% if (s.image) { %><img src="<%= s.image %>" alt="" <%= i === 0 ? 'fetchpriority=high' : 'loading=lazy' %>><% } %>
+    <% if (s.image) { %><img <%- imgAttrs(s.image, '100vw') %> alt="" <%= i === 0 ? 'fetchpriority=high' : 'loading=lazy' %>><% } %>
     <div class="wrap slide-body">
       <h1 class="<%= i === 0 ? '' : 'h1' %>"><%= c(s,'title') %></h1>
       <% if (c(s,'subtitle')) { %><p><%= c(s,'subtitle') %></p><% } %>
@@ -17,7 +17,7 @@
   <% if (slides.length > 1) { %>
   <div class="hero-ctl wrap">
     <% slides.forEach((s, i) => { %><button class="dot<%= i === 0 ? ' on' : '' %>" data-goto="<%= i %>" aria-label="<%= __('Slide') %> <%= i + 1 %>"></button><% }) %>
-    <button class="pp" data-pause data-pause-label="<%= __('Jeda slide') %>" data-play-label="<%= __('Putar slide') %>" aria-label="<%= __('Jeda slide') %>">II</button>
+    <button class="pp" data-pause data-pause-label="<%= __('Jeda slide') %>" data-play-label="<%= __('Putar slide') %>" aria-label="<%= __('Jeda slide') %>"><span aria-hidden="true">II</span></button>
   </div>
   <% } %>
 </section>
@@ -36,7 +36,7 @@
     <p><a class="btn btn-outline" href="<%= u('/tentang') %>"><%= __("Kenali Kami") %> <%- icon('arrow') %></a>
     <% if (doc) { %> <a class="btn btn-link" href="<%= u('/unduh/' + doc.id) %>" data-event="download_company_profile"><%- icon('download') %> <%= __("Unduh Company Profile") %></a><% } %></p>
   </div>
-  <figure class="photo"><img src="/img/tim-lapangan.jpg" alt="<%= __('Tim lapangan DIC dengan perlengkapan K3') %>" loading="lazy"></figure>
+  <figure class="photo"><img <%- imgAttrs('/img/tim-lapangan.jpg', '(min-width:980px) 560px, 92vw') %> alt="<%= __('Tim lapangan DIC dengan perlengkapan K3') %>" loading="lazy"></figure>
 </div></section>
 
 <% if (highlights.length) { %>
@@ -65,7 +65,7 @@
   <p class="eyebrow"><%= __("Rekam Jejak") %></p><h2><%= __("Proyek yang pernah kami kerjakan") %></h2>
   <div class="grid g2">
     <% projects.forEach(p => { %><article class="card project">
-      <% if (p.image) { %><img src="<%= p.image %>" alt="" loading="lazy"><% } %>
+      <% if (p.image) { %><img <%- imgAttrs(p.image, '(min-width:980px) 380px, (min-width:620px) 45vw, 92vw') %> alt="" loading="lazy"><% } %>
       <div class="pad"><span class="chip"><%= p.period %></span><h3><%= c(p,'title') %></h3><p><%= c(p,'summary') %></p>
       <p class="meta"><%- icon('pin','sm') %> <%= c(p,'location_public') %></p></div></article><% }) %>
   </div>

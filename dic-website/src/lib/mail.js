@@ -6,6 +6,9 @@ const { esc } = require('./util');
 const i18n = require('../i18n');
 
 let transport = null;
+// Mode sandbox tanpa SMTP: email ditangkap di memori agar alur form dapat diuji end-to-end
+const outbox = [];
+const sandboxCapture = () => process.env.SANDBOX === '1' && !config.smtp.host;
 const configured = () => !!config.smtp.host;
 function getTransport() {
   if (!transport && configured()) {
@@ -20,6 +23,7 @@ function getTransport() {
 
 // Mengembalikan { status: 'sent'|'failed'|'not_configured', error }
 async function send({ to, cc, replyTo, subject, html, text }) {
+  if (sandboxCapture()) { outbox.unshift({ at: new Date().toISOString(), to, cc, subject, text: text || '' }); outbox.length = Math.min(outbox.length, 100); return { status: 'sent' }; }
   const t = getTransport();
   if (!t) return { status: 'not_configured', error: 'SMTP belum dikonfigurasi' };
   if (!to) return { status: 'failed', error: 'Alamat tujuan notifikasi belum diisi di Pengaturan' };
@@ -63,4 +67,4 @@ async function autoresponse(s) {
     text: `${__('Yth.')} ${s.name},\n\n${raw}\n\n${__('Hormat kami,')}\nPT Dahana Investama Corp`,
   });
 }
-module.exports = { send, configured, notifySubmission, autoresponse, CATEGORIES };
+module.exports = { outbox, send, configured, notifySubmission, autoresponse, CATEGORIES };

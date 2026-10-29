@@ -1,0 +1,83 @@
+name: Sandbox
+
+# Simulasi end-to-end di sandbox terisolasi: persona pengunjung ID/EN, mobile, editor, reviewer, admin,
+# cek keamanan dasar, aksesibilitas (axe) dan Lighthouse. Hasil berupa artifact dan ringkasan di tab Summary.
+on:
+  workflow_dispatch:
+  pull_request:
+    paths: ["src/**", "views/**", "public/**", "scripts/**", "package*.json", "Dockerfile"]
+  schedule:
+    - cron: "17 2 * * 1"   # Senin dini hari UTC
+
+permissions:
+  contents: read
+
+concurrency:
+  group: sandbox-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  simulate:
+    name: Simulasi persona
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - name: Jalankan simulasi
+        run: npm run simulate -- --out sandbox-report
+      - name: Ringkasan
+        if: always()
+        run: |
+          [ -f sandbox-report/report.md ] && cat sandbox-report/report.md >> "$GITHUB_STEP_SUMMARY" || echo "Laporan tidak terbentuk" >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: sandbox-report
+          path: sandbox-report
+          retention-days: 14
+
+  lighthouse:
+    name: Lighthouse (mobile dan desktop)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Jalankan sandbox (indexable untuk audit SEO)
+        run: |
+          SANDBOX_INDEXABLE=1 PORT=3100 nohup npm run sandbox > sandbox.log 2>&1 &
+          for i in $(seq 1 40); do curl -fs http://127.0.0.1:3100/robots.txt >/dev/null && break; sleep 1; done
+      - name: Lighthouse
+        run: |
+          mkdir -p lh-report
+          for u in / /tentang /lini-bisnis /berita /kontak /en; do
+            for m in mobile desktop; do
+              n="$(echo "$u-$m" | tr '/' '_')"; P=""; [ "$m" = desktop ] && P="--preset=desktop"
+              npx --yes lighthouse "http://127.0.0.1:3100$u" $P --chrome-flags="--headless --no-sandbox" \
+                --only-categories=performance,accessibility,best-practices,seo --output=json --output-path="lh-report/$n.json" --quiet
+            done
+          done
+      - name: "Evaluasi terhadap target (sheet 03, 90 desktop dan 85 mobile)"
+        run: |
+          node -e "
+          const fs=require('fs');let bad=0;const rows=['| Halaman | Perf | A11y | BP | SEO | LCP |','|---|---|---|---|---|---|'];
+          for(const f of fs.readdirSync('lh-report').sort()){const d=JSON.parse(fs.readFileSync('lh-report/'+f));const c=d.categories;const s=k=>Math.round(c[k].score*100);
+            const desk=f.includes('desktop');const target=desk?90:85;const ok=s('performance')>=target&&s('accessibility')>=95&&s('seo')>=90;if(!ok)bad++;
+            rows.push('| '+f.replace('.json','')+(ok?'':' (GAGAL)')+' | '+s('performance')+' | '+s('accessibility')+' | '+s('best-practices')+' | '+s('seo')+' | '+d.audits['largest-contentful-paint'].displayValue+' |');}
+          fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY,'## Lighthouse\n\n'+rows.join('\n')+'\n');console.log(rows.join('\n'));process.exit(bad?1:0)"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: lighthouse-report
+          path: lh-report
+          retention-days: 14

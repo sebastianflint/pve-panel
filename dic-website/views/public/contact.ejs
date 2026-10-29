@@ -25,6 +25,7 @@
     </form>
   </div>
   <aside>
+    <h2 class="sr"><%= __('Kantor dan kontak langsung') %></h2>
     <% offices.forEach(o => { %><article class="card pad office"><span class="chip"><%= o.type === 'pusat' ? __('Kantor Pusat') : __('Cabang') %></span><h3><%= c(o,'name') %></h3>
       <p><%- U.esc(o.address).replace(/\n/g, '<br>') %></p>
       <% if (U.safeUrl(o.map_url)) { %><a class="btn btn-link" href="<%= U.safeUrl(o.map_url) %>" target="_blank" rel="noopener"><%- icon('pin','sm') %> <%= __("Lihat di peta") %></a><% } %></article><% }) %>

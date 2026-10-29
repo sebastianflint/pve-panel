@@ -1,0 +1,9 @@
+{
+  "name": "dic.id sandbox",
+  "image": "mcr.microsoft.com/devcontainers/javascript-node:22-bookworm",
+  "forwardPorts": [3100],
+  "portsAttributes": { "3100": { "label": "DIC sandbox", "onAutoForward": "openBrowser" } },
+  "postCreateCommand": "npm ci",
+  "postStartCommand": "nohup npm run sandbox > /tmp/sandbox.log 2>&1 &",
+  "customizations": { "vscode": { "extensions": ["dbaeumer.vscode-eslint", "EditorConfig.EditorConfig"] } }
+}

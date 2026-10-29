@@ -32,6 +32,7 @@ const EN = {
   'Tanya tentang layanan ini': 'Ask about this service', 'Lini bisnis lainnya': 'Other business lines', 'Rencana ekspansi': 'Planned expansion', 'Melalui mitra': 'Through partners',
   // berita, pencarian
   'Belum ada berita pada kategori ini.': 'No news in this category yet.', 'Berita lainnya': 'More news', 'Semua berita ': 'All news',
+  'Daftar berita': 'News list', 'Lini utama': 'Core business lines', 'Kantor dan kontak langsung': 'Offices and direct contact',
   'Pencarian': 'Search', 'Kata kunci': 'Keyword', 'Cari berita, lini bisnis...': 'Search news, business lines...', 'Masukkan minimal 2 karakter.': 'Enter at least 2 characters.',
   'Tidak ada hasil untuk': 'No results for', 'hasil untuk': 'results for', 'Foto:': 'Photo:',
   // unduhan

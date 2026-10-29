@@ -1,0 +1,17 @@
+# Reverse proxy HTTPS otomatis (Let's Encrypt). Ganti dic.id sesuai domain.
+dic.id, www.dic.id {
+	encode zstd gzip
+	@www host www.dic.id
+	redir @www https://dic.id{uri} permanent
+
+	# Batas ukuran body sejalan dengan MAX_UPLOAD_MB (10 MB) ditambah overhead
+	request_body {
+		max_size 12MB
+	}
+	reverse_proxy 127.0.0.1:3000 {
+		header_up X-Forwarded-Proto {scheme}
+	}
+	log {
+		output file /var/log/caddy/dic.id.access.log
+	}
+}

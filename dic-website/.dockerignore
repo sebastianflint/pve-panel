@@ -3,3 +3,8 @@ node_modules
 data
 uploads
 .env
+docs
+sandbox-report
+lh-report
+.github
+.devcontainer

@@ -114,6 +114,7 @@ const nowUtc = () => new Date().toISOString().slice(0, 19).replace('T', ' ');
 const isLive = (row) => row.status === 'published' && (!row.publish_at || row.publish_at <= nowUtc());
 const mediaImages = () => db.prepare('SELECT * FROM media ORDER BY id DESC LIMIT 200').all().filter((m) => isImage(m.filename));
 function recordMedia(req, file) {
+  if (isImage(file.filename)) require('../lib/img').makeVariants(file.path).catch((e) => console.error('[img]', e.message)); // varian responsif di latar belakang
   db.prepare('INSERT INTO media(filename,original,mime,size,uploaded_by) VALUES(?,?,?,?,?)').run(file.filename, file.originalname.slice(0, 120), file.mimetype, file.size, req.user.id);
 }
 
@@ -310,6 +311,12 @@ router.post('/media/:id/hapus', formParsers, requireRole('reviewer'), (req, res)
     audit(req.user, 'hapus', 'media', m.id, m.original, ip(req));
   }
   res.redirect('/admin/media');
+});
+
+// ---------- Outbox (khusus sandbox) ----------
+router.get('/outbox', requireRole('admin'), (req, res) => {
+  if (process.env.SANDBOX !== '1') return res.status(404).render('admin/error', { title: 'Tidak ditemukan', message: 'Hanya tersedia pada mode sandbox.' });
+  res.render('admin/outbox', { title: 'Outbox sandbox', rows: mail.outbox });
 });
 
 // ---------- Audit ----------

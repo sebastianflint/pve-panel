@@ -1,4 +1,5 @@
 <a class="skip" href="#konten"><%= __("Lewati ke konten") %></a>
+<% if (typeof sandboxBanner !== 'undefined' && sandboxBanner) { %><div class="preview-bar sandbox-bar">SANDBOX: data demo untuk simulasi, bukan konten resmi DIC.</div><% } %>
 <% if (preview) { %><div class="preview-bar"><%= __("Mode pratinjau: konten yang belum tayang ikut ditampilkan.") %> <a href="/admin"><%= __("Kembali ke CMS") %></a></div><% } %>
 <header class="site-header" id="top">
   <div class="topbar"><div class="wrap">
@@ -10,7 +11,7 @@
     </span>
   </div></div>
   <div class="wrap navbar">
-    <a class="brand" href="<%= u('/') %>" aria-label="<%= st.site_name %> - <%= __('Beranda') %>"><img src="<%= st.logo || '/img/logo.png' %>" alt="<%= st.site_short || 'DIC' %>" height="44"><span class="brand-text"><strong><%= st.site_name %></strong><small><%= __("Pengadaan Barang dan Jasa") %></small></span></a>
+    <a class="brand" href="<%= u('/') %>"><img src="<%= st.logo || '/img/logo.png' %>" alt="<%= st.site_short || 'DIC' %>" height="44"><span class="brand-text"><strong><%= st.site_name %></strong><small><%= __("Pengadaan Barang dan Jasa") %></small></span></a>
     <button class="nav-toggle" aria-expanded="false" aria-controls="menu" aria-label="<%= __('Buka menu') %>" data-label-open="<%= __('Buka menu') %>" data-label-close="<%= __('Tutup menu') %>"><%- icon('menu') %></button>
     <nav id="menu" class="menu" aria-label="<%= __('Navigasi utama') %>">
       <ul>

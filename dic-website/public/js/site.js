@@ -18,7 +18,7 @@
     var loop = function () { clearInterval(t); if (!paused) t = setInterval(function () { show(i + 1); }, 6500); };
     dots.forEach(function (d) { d.addEventListener('click', function () { show(+d.dataset.goto); loop(); }); });
     var pp = document.querySelector('[data-pause]');
-    if (pp) pp.addEventListener('click', function () { paused = !paused; pp.textContent = paused ? '▶' : 'II'; pp.setAttribute('aria-label', pp.getAttribute(paused ? 'data-play-label' : 'data-pause-label')); loop(); });
+    if (pp) pp.addEventListener('click', function () { paused = !paused; pp.firstElementChild.textContent = paused ? '▶' : 'II'; pp.setAttribute('aria-label', pp.getAttribute(paused ? 'data-play-label' : 'data-pause-label')); loop(); });
     loop();
   }
 

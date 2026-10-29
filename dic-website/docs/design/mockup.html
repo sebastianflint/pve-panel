@@ -1,0 +1,209 @@
+<!doctype html>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<script type="module">import mermaid from "https://cdn.jsdelivr.net/npm/mermaid@10.9.1/dist/mermaid.esm.min.mjs"; mermaid.initialize({startOnLoad:true,theme:"neutral"});</script>
+<title>Mockup dic.id</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500&display=swap">
+<style>
+/* Konsep layout: papan review desain. Bingkai browser/ponsel yang dapat di-scroll menampilkan layar nyata hasil sandbox. */
+:root{
+  --bg:#f4f8f6; --surface:#ffffff; --ink:#14281d; --muted:#53655b; --line:#d9e5df; --green:#305E3F; --teal:#4DC2A9; --teal-d:#1f7a67; --orange:#F9A70D; --tint:#e9f3ee; --warn:#7a4a00; --warn-bg:#fff3d9;
+  --font:"Inter",system-ui,-apple-system,"Segoe UI",sans-serif; --mono:"JetBrains Mono",ui-monospace,Menlo,monospace;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#0e1612;--surface:#15211b;--ink:#e8f1ec;--muted:#a1b4a9;--line:#28392f;--green:#4DC2A9;--teal-d:#62d1b8;--tint:#1a2a22;--warn:#f3d28b;--warn-bg:#3a2d10;color-scheme:dark}}
+:root[data-theme="dark"]{--bg:#0e1612;--surface:#15211b;--ink:#e8f1ec;--muted:#a1b4a9;--line:#28392f;--green:#4DC2A9;--teal-d:#62d1b8;--tint:#1a2a22;--warn:#f3d28b;--warn-bg:#3a2d10;color-scheme:dark}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--ink);font-family:var(--font);font-size:15px;line-height:1.6;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:0}
+.wrap{max-width:1180px;margin-inline:auto}
+a{color:var(--teal-d)}
+h1,h2,h3{line-height:1.15;margin:0;text-wrap:balance;letter-spacing:-.015em}
+h1{font-size:clamp(2.1rem,5vw,3.4rem);font-weight:800}
+h2{font-size:clamp(1.4rem,2.6vw,1.9rem);font-weight:700}
+h3{font-size:1.02rem;font-weight:700}
+.eyebrow{font-family:var(--mono);font-size:.72rem;letter-spacing:.12em;text-transform:uppercase;color:var(--teal-d);margin:0 0 8px}
+.muted{color:var(--muted)}
+header.top{padding-block:44px 28px;border-bottom:1px solid var(--line)}
+header.top p.lead{max-width:68ch;color:var(--muted);font-size:1.05rem;margin:14px 0 0}
+.meta{display:flex;flex-wrap:wrap;gap:8px;margin-top:20px}
+.pill{font-family:var(--mono);font-size:.72rem;border:1px solid var(--line);border-radius:999px;padding:3px 12px;background:var(--surface)}
+.pill.restr{background:var(--green);border-color:var(--green);color:#fff}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]) .pill.restr{color:#06231a}}
+nav.jump{position:sticky;top:env(safe-area-inset-top,0px);z-index:5;background:var(--bg);border-bottom:1px solid var(--line);display:flex;gap:6px;overflow-x:auto;padding-block:10px}
+nav.jump a{white-space:nowrap;text-decoration:none;color:var(--ink);border:1px solid var(--line);background:var(--surface);border-radius:999px;padding:5px 14px;font-weight:600;font-size:.85rem}
+nav.jump a:hover{border-color:var(--teal)}
+body::before{content:"";position:fixed;inset:0 0 auto;height:env(safe-area-inset-top,0px);z-index:10;background:var(--bg)}
+section{padding-block:56px 8px;scroll-margin-top:56px}
+section>.head{display:grid;gap:6px;margin-bottom:22px;max-width:70ch}
+section>.head p{margin:0;color:var(--muted)}
+.grid2{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:20px}
+.grid3{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:18px}
+@media(max-width:860px){.grid2,.grid3{grid-template-columns:minmax(0,1fr)}}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:20px;min-width:0}
+.card ul{margin:10px 0 0;padding-left:18px}.card li{margin:4px 0}
+.tablewrap{overflow-x:auto;border:1px solid var(--line);border-radius:14px;background:var(--surface)}
+table{border-collapse:collapse;width:100%;min-width:680px}
+th{font-family:var(--mono);font-size:.7rem;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);text-align:left;padding:10px 14px;border-bottom:1px solid var(--line)}
+td{padding:11px 14px;border-bottom:1px solid var(--line);vertical-align:top}
+tr:last-child td{border-bottom:0}
+code{font-family:var(--mono);font-size:.82em;background:var(--tint);border-radius:6px;padding:1px 6px}
+.swatches{display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:14px}
+.sw{border:1px solid var(--line);border-radius:14px;overflow:hidden;background:var(--surface)}
+.sw .chip{height:76px;display:flex;align-items:end;padding:8px 12px;font-family:var(--mono);font-size:.74rem}
+.sw .txt{padding:10px 12px;font-size:.84rem}.sw .txt b{display:block}
+.grad{background:linear-gradient(135deg,#4DC2A9 0%,#a6d67a 55%,#F9A70D 100%)}
+.type-row{display:grid;grid-template-columns:150px minmax(0,1fr);gap:14px;align-items:baseline;padding:10px 0;border-bottom:1px solid var(--line)}
+.type-row:last-child{border-bottom:0}.type-row span{font-family:var(--mono);font-size:.72rem;color:var(--muted)}
+.shapes{display:flex;flex-wrap:wrap;gap:18px;align-items:end}
+.arch{width:64px;height:76px;border-radius:32px 32px 12px 12px;background:linear-gradient(180deg,#4DC2A9,#8fd08a)}
+.leaf{width:64px;height:64px;border-radius:50% 0 50% 50%;background:linear-gradient(135deg,#4DC2A9,#F9A70D)}
+.pillbtn{padding:10px 22px;border-radius:999px;background:var(--green);color:#fff;font-weight:600}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]) .pillbtn{color:#06231a}}
+.frame{border:1px solid var(--line);border-radius:14px;overflow:hidden;background:var(--surface);min-width:0}
+.bar{display:flex;align-items:center;gap:7px;padding:9px 12px;border-bottom:1px solid var(--line);background:var(--tint)}
+.bar i{width:10px;height:10px;border-radius:50%;background:var(--line);display:block}
+.bar span{margin-left:8px;font-family:var(--mono);font-size:.72rem;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.vp{height:600px;overflow:auto;background:#fff}
+.vp img{display:block;width:100%;height:auto}
+.cap{padding:12px 14px;font-size:.88rem;border-top:1px solid var(--line)}
+.cap b{display:block;margin-bottom:2px}
+.phones{display:flex;flex-wrap:wrap;gap:22px;justify-content:center}
+.phone{width:min(300px,100%);border:6px solid var(--ink);border-radius:30px;overflow:hidden;background:var(--surface)}
+.phone .vp{height:560px}
+.phonecap{width:min(300px,100%);text-align:center;font-size:.86rem;margin-top:8px}
+.note{background:var(--warn-bg);color:var(--warn);border-radius:12px;padding:12px 16px;font-size:.9rem}
+.badge{display:inline-block;border-radius:999px;padding:1px 10px;font-size:.74rem;font-weight:700;border:1px solid var(--line)}
+.badge.ok{background:#d7f2e6;color:#0f4a3b;border-color:#b6e5d5}.badge.plan{background:#fff3d9;color:#7a4a00;border-color:#f3d28b}.badge.rev{background:#e8eaed;color:#40474f}
+.mermaid{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:16px;overflow-x:auto}
+ol.steps{margin:0;padding-left:20px}ol.steps li{margin:6px 0}
+footer{padding-block:48px 56px;color:var(--muted);font-size:.85rem;border-top:1px solid var(--line);margin-top:56px}
+</style>
+
+<div class="wrap">
+<header class="top">
+  <p class="eyebrow">PT Dahana Investama Corp · dic.id</p>
+  <h1>Mockup website dic.id</h1>
+  <p class="lead">Papan review desain website company profile dengan CMS, berbahasa Indonesia dan English. Struktur navigasi dan pola halaman mengacu pada pertamina.com, sedangkan identitas visual mengikuti company profile DIC. Semua layar di bawah adalah hasil render sandbox, bukan gambar ilustrasi.</p>
+  <div class="meta"><span class="pill restr">RESTRICTED</span><span class="pill">v1.0 · 29 Okt 2026</span><span class="pill">Draf untuk persetujuan DIC</span><span class="pill">ID + EN</span></div>
+</header>
+<nav class="jump" aria-label="Bagian papan">
+  <a href="#referensi">Referensi</a><a href="#sistem">Design system</a><a href="#desktop">Desktop</a><a href="#mobile">Mobile</a><a href="#komponen">Komponen</a><a href="#alur">Struktur dan alur</a><a href="#cms">CMS</a><a href="#keputusan">Keputusan DIC</a>
+</nav>
+
+<section id="referensi">
+  <div class="head"><p class="eyebrow">1 · Referensi</p><h2>Yang dipakai dari pertamina.com</h2>
+  <p>Pengamatan berasal dari teks menu dan footer beranda pertamina.com. Pola hero, kartu, dan warna adalah keputusan desain DIC, bukan salinan visual Pertamina.</p></div>
+  <div class="tablewrap"><table>
+    <thead><tr><th>Elemen di pertamina.com</th><th>Diadaptasi ke dic.id</th><th>Alasan</th></tr></thead>
+    <tbody>
+      <tr><td>Utility bar atas: pilihan bahasa, tautan layanan, pencarian</td><td>Top bar: jam layanan, email resmi, Unduhan, switcher <code>ID | EN</code>; pencarian di navbar</td><td>Procurement officer sering mencari kontak dan dokumen lebih dulu</td></tr>
+      <tr><td>Menu utama: Tentang Kami, Bisnis Kami, Hubungan Investor, Media &amp; Informasi, Keberlanjutan</td><td>Beranda, Tentang Kami, <b>Lini Bisnis</b> (submenu), Berita, Kontak, plus tombol <b>Hubungi Kami</b></td><td>Lima halaman sesuai Assessment A#5; Lini Bisnis terpisah agar mudah dicari</td></tr>
+      <tr><td>Bisnis Kami sebagai pintu ke unit bisnis</td><td>Kartu 4 lini utama (ikon lengkung dari motif compro) dan seksi lini tambahan</td><td>Urutan mengikuti kekuatan bukti: Konstruksi, Transportation, Rental &amp; Support, Trading</td></tr>
+      <tr><td>Media &amp; Informasi, Pertamina Info</td><td>Berita dengan kategori Korporat, Kegiatan, Informasi; halaman Unduhan</td><td>Ritme 1 sampai 2 artikel per bulan (A#22)</td></tr>
+      <tr><td>Footer multi-kolom: alamat, email, kolom Announcement, Network, Tools, Privacy Policy</td><td>Footer 4 kolom: profil singkat, tautan, lini bisnis, kontak kantor pusat dan cabang; Kebijakan Privasi dan Peta Situs</td><td>Informasi kontak resmi selalu terlihat</td></tr>
+      <tr><td>Investor Relations, Career, Whistle Blowing, Subholding network</td><td><b>Tidak dipakai saat launch</b>; ruang di footer disiapkan</td><td>Karier, portal vendor, WBS ditunda ke fase berikut (A#30)</td></tr>
+    </tbody></table></div>
+</section>
+
+<section id="sistem">
+  <div class="head"><p class="eyebrow">2 · Design system</p><h2>Token visual dari company profile DIC</h2>
+  <p>Kode warna diambil dengan sampling dari PDF compro, bukan dari brand guideline. Perlu konfirmasi kode resmi (A#11).</p></div>
+  <div class="swatches">
+    <div class="sw"><div class="chip" style="background:#305E3F;color:#fff">#305E3F</div><div class="txt"><b>Hijau tua</b>Tombol utama, teks aksen. Putih di atasnya 7,5:1</div></div>
+    <div class="sw"><div class="chip" style="background:#4DC2A9;color:#14281d">#4DC2A9</div><div class="txt"><b>Teal</b>Dekorasi, ikon, garis. Tidak untuk teks (2,2:1 di atas putih)</div></div>
+    <div class="sw"><div class="chip" style="background:#1f7a67;color:#fff">#1F7A67</div><div class="txt"><b>Teal tua</b>Tautan dan eyebrow, 5,2:1 di atas putih</div></div>
+    <div class="sw"><div class="chip" style="background:#F9A70D;color:#201400">#F9A70D</div><div class="txt"><b>Kuning-oranye</b>CTA di atas foto, penanda aktif. Teks gelap 9,1:1</div></div>
+    <div class="sw"><div class="chip grad" style="color:#14281d">Gradasi</div><div class="txt"><b>Teal ke kuning-oranye</b>Banner CTA, kartu Visi, bentuk dekoratif</div></div>
+    <div class="sw"><div class="chip" style="background:#f2f8f5;color:#1c2b24;border-bottom:1px solid #d9e5df">#F2F8F5</div><div class="txt"><b>Tint</b>Latar seksi selang-seling</div></div>
+  </div>
+  <div class="grid2" style="margin-top:20px">
+    <div class="card"><h3>Tipografi: Inter</h3><p class="muted" style="margin:4px 0 10px">Font yang tertanam di compro, berlisensi SIL OFL. Dilayani dari server sendiri (tanpa CDN).</p>
+      <div class="type-row"><span>H1 · 800</span><b style="font-size:2rem;line-height:1.1">Mitra pengadaan</b></div>
+      <div class="type-row"><span>H2 · 700</span><b style="font-size:1.5rem">Layanan untuk kebutuhan industri</b></div>
+      <div class="type-row"><span>H3 · 700</span><b>Transportation dan Logistics</b></div>
+      <div class="type-row"><span>Body · 400/16px</span><span style="font-family:var(--font);font-size:1rem;color:var(--ink)">Teks isi maksimal 75 karakter per baris agar nyaman dibaca.</span></div>
+      <div class="type-row"><span>Eyebrow · 700</span><b style="font-size:.78rem;letter-spacing:.12em;text-transform:uppercase;color:var(--teal-d)">Lini Bisnis</b></div></div>
+    <div class="card"><h3>Bentuk dan motif</h3><p class="muted" style="margin:4px 0 14px">Geometri membulat dari compro: lengkung untuk ikon lini bisnis, daun dua kelopak untuk penutup hero dan header halaman.</p>
+      <div class="shapes"><div class="arch" title="Ikon lini bisnis"></div><div class="leaf" title="Penutup hero"></div><div class="pillbtn">Hubungi Kami</div></div>
+      <ul><li>Radius kartu 18px, tombol pill penuh</li><li>Jarak vertikal seksi 48 sampai 92px (fluid)</li><li>Motion ringan: carousel 6,5 detik, hover kartu naik 4px; mengikuti <code>prefers-reduced-motion</code></li><li>Mode gelap otomatis mengikuti sistem</li></ul></div>
+  </div>
+</section>
+
+<section id="desktop">
+  <div class="head"><p class="eyebrow">3 · Desktop</p><h2>Halaman utama, 1366 px</h2><p>Scroll di dalam bingkai untuk melihat seluruh halaman. Konten adalah data demo sandbox.</p></div>
+  <div class="grid2">
+    <figure class="frame" style="margin:0"><div class="bar"><i></i><i></i><i></i><span>dic.id</span></div><div class="vp"><img src="screens/id-home.webp" alt="Beranda dic.id Bahasa Indonesia" loading="lazy"></div><figcaption class="cap"><b>Beranda</b>Hero carousel dengan CTA "Lihat Lini Bisnis", strip sektor, tentang, keunggulan, 4 lini bisnis, rekam jejak, berita, banner CTA "Hubungi Kami".</figcaption></figure>
+    <figure class="frame" style="margin:0"><div class="bar"><i></i><i></i><i></i><span>dic.id/en</span></div><div class="vp"><img src="screens/en-home.webp" alt="Beranda dic.id English" loading="lazy"></div><figcaption class="cap"><b>Beranda English</b>Struktur identik, path <code>/en</code>, switcher EN aktif, UI dan konten CMS berbahasa English.</figcaption></figure>
+    <figure class="frame" style="margin:0"><div class="bar"><i></i><i></i><i></i><span>dic.id/tentang</span></div><div class="vp"><img src="screens/id-tentang.webp" alt="Halaman Tentang Kami" loading="lazy"></div><figcaption class="cap"><b>Tentang Kami</b>Profil, kartu Visi bergradasi, 5 butir Misi, timeline roadmap dengan label <span class="badge ok">Terealisasi</span> / <span class="badge plan">Rencana</span>, rekam jejak, kantor.</figcaption></figure>
+    <figure class="frame" style="margin:0"><div class="bar"><i></i><i></i><i></i><span>dic.id/lini-bisnis</span></div><div class="vp"><img src="screens/id-lini-bisnis.webp" alt="Halaman Lini Bisnis" loading="lazy"></div><figcaption class="cap"><b>Lini Bisnis</b>Empat lini utama berfoto, lini tambahan di seksi terpisah. Halaman detail per lini memuat cakupan layanan dan CTA.</figcaption></figure>
+    <figure class="frame" style="margin:0"><div class="bar"><i></i><i></i><i></i><span>dic.id/berita</span></div><div class="vp"><img src="screens/id-berita.webp" alt="Halaman Berita" loading="lazy"></div><figcaption class="cap"><b>Berita</b>Filter kategori, kartu 3 kolom, pencarian di navbar, pagination.</figcaption></figure>
+    <figure class="frame" style="margin:0"><div class="bar"><i></i><i></i><i></i><span>dic.id/kontak</span></div><div class="vp"><img src="screens/id-kontak.webp" alt="Halaman Kontak" loading="lazy"></div><figcaption class="cap"><b>Kontak</b>Form dengan 6 field dan persetujuan privasi, kartu kantor pusat dan cabang, kontak langsung, WhatsApp.</figcaption></figure>
+  </div>
+</section>
+
+<section id="mobile">
+  <div class="head"><p class="eyebrow">4 · Mobile</p><h2>Ponsel, 390 px</h2><p>Menu hamburger dengan submenu terbuka, kolom tunggal, tombol minimal 44 px. Tidak ada scroll horizontal pada semua halaman yang diuji.</p></div>
+  <div class="phones">
+    <div><div class="phone"><div class="vp"><img src="screens/m-id-home.webp" alt="Beranda di ponsel" loading="lazy"></div></div><p class="phonecap"><b>Beranda</b></p></div>
+    <div><div class="phone"><div class="vp"><img src="screens/m-id-menu.webp" alt="Menu di ponsel" loading="lazy"></div></div><p class="phonecap"><b>Menu terbuka</b></p></div>
+    <div><div class="phone"><div class="vp"><img src="screens/m-en-contact.webp" alt="Kontak English di ponsel" loading="lazy"></div></div><p class="phonecap"><b>Kontak (EN)</b></p></div>
+  </div>
+</section>
+
+<section id="komponen">
+  <div class="head"><p class="eyebrow">5 · Komponen</p><h2>Perilaku dan aturan konten</h2></div>
+  <div class="tablewrap"><table>
+    <thead><tr><th>Komponen</th><th>Perilaku</th><th>Aturan konten</th></tr></thead>
+    <tbody>
+      <tr><td>Header + navbar</td><td>Sticky; submenu Lini Bisnis saat hover/fokus; hamburger di bawah 1020 px</td><td>Maksimal 5 menu; satu CTA utama "Hubungi Kami"</td></tr>
+      <tr><td>Hero carousel</td><td>Otomatis 6,5 detik, dot, tombol jeda; berhenti bila reduced-motion</td><td>Maksimal 3 slide; hindari klaim "terbaik" tanpa bukti (A#4)</td></tr>
+      <tr><td>Kartu lini bisnis</td><td>Ikon lengkung, hover naik 4px, seluruh kartu dapat diklik</td><td>Label <span class="badge ok">Aktif</span>, <span class="badge rev">Melalui mitra</span>, atau <span class="badge plan">Rencana</span> (A#18)</td></tr>
+      <tr><td>Timeline roadmap</td><td>Lingkaran tahun, garis vertikal, label realisasi atau rencana</td><td>Butir 2025 sampai 2027 tayang hanya bila disetujui (A#20)</td></tr>
+      <tr><td>Rekam jejak</td><td>Kartu foto, periode, lokasi, sumber dan tanggal as-of</td><td>Wajib ada pemberi izin sebelum tayang (A#19)</td></tr>
+      <tr><td>Form kontak</td><td>Validasi sisi server, honeypot, rate limit, pesan sukses, autoresponse</td><td>Field: nama, instansi, email, telepon opsional, kategori, pesan (A#9)</td></tr>
+      <tr><td>Banner cookie</td><td>Muncul bila Analytics diaktifkan; Tolak dan Setuju setara</td><td>Analytics dimuat hanya setelah Setuju</td></tr>
+      <tr><td>Dokumen unduhan</td><td>Langsung atau melalui form (press kit)</td><td>Versi, bahasa, tanggal berlaku (A#23)</td></tr>
+    </tbody></table></div>
+</section>
+
+<section id="alur">
+  <div class="head"><p class="eyebrow">6 · Struktur dan alur</p><h2>Sitemap dan jalur inquiry</h2></div>
+  <pre class="mermaid">
+flowchart LR
+  H[Beranda] --> T[Tentang Kami]
+  H --> L[Lini Bisnis]
+  H --> B[Berita]
+  H --> K[Kontak]
+  L --> L1[Detail lini]
+  B --> B1[Detail berita]
+  H --> U[Unduhan]
+  K --> F((Form kontak))
+  F --> S[(CMS: Pesan masuk)]
+  F --> E[Email PIC + autoresponse]
+  </pre>
+  <div class="grid2" style="margin-top:20px">
+    <div class="card"><h3>Jalur procurement officer</h3><ol class="steps"><li>Beranda: membaca posisi dan 4 lini bisnis</li><li>Detail lini: cakupan layanan</li><li>Rekam jejak di Tentang Kami</li><li>Hubungi Kami: form kontak dengan kategori Kerja sama bisnis</li><li>Autoresponse, PIC menindaklanjuti dalam 2 hari kerja</li></ol></div>
+    <div class="card"><h3>Jalur media atau publik</h3><ol class="steps"><li>Berita dan Unduhan (Company Profile, press kit)</li><li>Kategori Media / Humas pada form</li><li>Email dan WhatsApp bisnis di footer</li></ol></div>
+  </div>
+</section>
+
+<section id="cms">
+  <div class="head"><p class="eyebrow">7 · CMS</p><h2>Panel pengelola konten</h2><p>Editor menulis dan mengirim review, Reviewer/Publisher menayangkan, Admin mengelola pengaturan dan pengguna. Setiap field teks punya padanan English.</p></div>
+  <div class="grid2">
+    <figure class="frame" style="margin:0"><div class="bar"><i></i><i></i><i></i><span>dic.id/admin/c/berita</span></div><div class="vp" style="height:420px"><img src="screens/cms-berita-form.webp" alt="Form berita di CMS" loading="lazy"></div><figcaption class="cap"><b>Form berita</b>Editor rich text, jadwal tayang WIB, tombol Simpan draft dan Kirim untuk review.</figcaption></figure>
+    <figure class="frame" style="margin:0"><div class="bar"><i></i><i></i><i></i><span>dic.id/admin</span></div><div class="vp" style="height:420px"><img src="screens/cms-reviewer-dashboard.webp" alt="Dashboard reviewer" loading="lazy"></div><figcaption class="cap"><b>Dashboard</b>Antrean review, pesan masuk, dan checklist kesiapan launch.</figcaption></figure>
+  </div>
+</section>
+
+<section id="keputusan">
+  <div class="head"><p class="eyebrow">8 · Keputusan DIC</p><h2>Yang dibutuhkan agar mockup menjadi desain final</h2></div>
+  <div class="grid3">
+    <div class="card"><h3>Identitas</h3><ul><li>Logo vektor resmi dan versi yang berlaku (teal-hijau-emas atau biru-oranye), A#11</li><li>Kode warna resmi atau brand guideline</li><li>2 sampai 3 referensi website tambahan dan catatan suka/tidak suka, A#12</li></ul></div>
+    <div class="card"><h3>Konten</h3><ul><li>Kalimat posisi dan 2 sampai 3 pembeda, A#4</li><li>Foto asli resolusi tinggi beserta izin, A#13</li><li>3 sampai 5 artikel berita awal, A#22</li></ul></div>
+    <div class="card"><h3>Publikasi</h3><ul><li>Roadmap 2025 sampai 2027 dan lini tambahan, A#18 dan A#20</li><li>Detail proyek handak dan izin klien, A#19</li><li>Naskah privasi dari Legal, A#29</li></ul></div>
+  </div>
+  <p class="note" style="margin-top:20px">Layar pada papan ini memakai data demo sandbox, termasuk butir yang di produksi masih menunggu izin DIC (misalnya roadmap 2025 sampai 2027). Butir tersebut tidak tayang sebelum disetujui.</p>
+</section>
+<footer>PT Dahana Investama Corp · Mockup website dic.id v1.0 · RESTRICTED · Dibuat oleh SINUX berdasarkan Website Assessment v1.0 dan Company Profile 03b.</footer>
+</div>

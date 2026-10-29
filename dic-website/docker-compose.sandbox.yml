@@ -1,0 +1,10 @@
+# Sandbox terisolasi: data demo, akun per peran, email ditangkap di /admin/outbox. Tanpa volume, hilang saat dihentikan.
+#   docker compose -f docker-compose.sandbox.yml up --build     lalu buka http://localhost:3100
+services:
+  dic-sandbox:
+    build: .
+    command: ["node", "src/sandbox.js"]
+    environment:
+      PORT: "3100"
+      SANDBOX_DIR: /tmp/sandbox
+    ports: ["127.0.0.1:3100:3100"]
