@@ -1,0 +1,9 @@
+<%- include("../partials/admin-head") %>
+<div class="head"><h1>Pesan masuk</h1><a class="btn" href="/admin/pesan/export.csv">Export CSV</a></div>
+<% if (!mailOk) { %><div class="flash warn">SMTP belum dikonfigurasi: notifikasi email tidak dikirim. Gunakan "Kirim ulang" setelah SMTP aktif.</div><% } %>
+<div class="filters"><a href="/admin/pesan" class="<%= !f ? 'on' : '' %>">Semua</a><a href="/admin/pesan?f=baru" class="<%= f === 'baru' ? 'on' : '' %>">Belum ditangani</a><a href="/admin/pesan?f=gagal" class="<%= f === 'gagal' ? 'on' : '' %>">Email gagal</a></div>
+<div class="tablewrap"><table class="table"><thead><tr><th>Waktu (UTC)</th><th>Pengirim</th><th>Keperluan</th><th>Email</th><th>Status</th></tr></thead><tbody>
+<% rows.forEach(s => { %><tr><td><small><%= s.created_at %></small></td><td><a href="/admin/pesan/<%= s.id %>"><strong><%= s.name %></strong></a><br><small><%= s.org %></small></td><td><%= cats[s.category] || s.category %></td>
+<td><span class="badge <%= s.email_status === 'sent' ? 'published' : 'review' %>"><%= s.email_status %></span></td><td><%= s.handled ? 'Ditangani' : 'Baru' %></td></tr><% }) %>
+<% if (!rows.length) { %><tr><td colspan="5" class="muted">Tidak ada pesan.</td></tr><% } %></tbody></table></div>
+<%- include("../partials/admin-foot") %>

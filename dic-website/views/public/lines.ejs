@@ -1,0 +1,21 @@
+<%- include('../partials/head') %>
+<body>
+<%- include('../partials/header') %>
+<main id="konten">
+<section class="page-hero"><div class="wrap"><nav class="crumb" aria-label="Breadcrumb"><a href="/">Beranda</a> / Lini Bisnis</nav><h1>Lini Bisnis</h1><p class="lead">Empat lini utama yang saling melengkapi dalam satu mitra.</p></div></section>
+<section class="section"><div class="wrap">
+  <div class="grid g2"><% utama.forEach(l => { %>
+    <a class="card line wide" href="/lini-bisnis/<%= l.slug %>">
+      <% if (l.image) { %><img src="<%= l.image %>" alt="" loading="lazy"><% } %>
+      <div class="pad"><span class="arch sm"><%- icon(l.icon || 'layers') %></span><h3><%= l.title %></h3><p><%= l.summary %></p>
+      <ul class="tick"><% U.lines(l.items).slice(0, 3).forEach(i => { %><li><%= i %></li><% }) %></ul><span class="more">Selengkapnya <%- icon('arrow') %></span></div>
+    </a><% }) %></div>
+  <% if (utama.length === 0) { %><p class="muted">Informasi lini bisnis segera tersedia.</p><% } %>
+</div></section>
+<% if (tambahan.length) { %>
+<section class="section tint"><div class="wrap"><p class="eyebrow">Lini Bisnis Tambahan</p><h2>Selain lini utama, kami aktif berkontribusi dalam</h2>
+  <div class="grid g2"><% tambahan.forEach(l => { %><a class="card line" href="/lini-bisnis/<%= l.slug %>"><span class="arch sm"><%- icon(l.icon || 'gear') %></span><h3><%= l.title %></h3><p><%= l.summary %></p><span class="more">Selengkapnya <%- icon('arrow') %></span></a><% }) %></div>
+</div></section>
+<% } %>
+</main>
+<%- include('../partials/footer') %>

@@ -1,0 +1,19 @@
+<%- include('../partials/head') %>
+<body>
+<%- include('../partials/header') %>
+<main id="konten">
+<section class="page-hero"><div class="wrap"><h1>Pencarian</h1>
+  <form class="search big" action="/cari" role="search"><label class="sr" for="q2">Kata kunci</label><input id="q2" name="q" type="search" value="<%= q %>" maxlength="80" placeholder="Cari berita, lini bisnis..."><button class="btn btn-primary">Cari</button></form></div></section>
+<section class="section"><div class="wrap narrow-l">
+<% const total = posts.length + lines.length + pages.length; %>
+<% if (q.length < 2) { %><p class="muted">Masukkan minimal 2 karakter.</p>
+<% } else if (!total) { %><p>Tidak ada hasil untuk "<strong><%= q %></strong>".</p>
+<% } else { %><p class="muted"><%= total %> hasil untuk "<%= q %>"</p>
+  <ul class="results">
+  <% lines.forEach(l => { %><li><span class="chip">Lini Bisnis</span><a href="/lini-bisnis/<%= l.slug %>"><%= l.title %></a><p><%= l.summary %></p></li><% }) %>
+  <% posts.forEach(p => { %><li><span class="chip">Berita</span><a href="/berita/<%= p.slug %>"><%= p.title %></a><p><%= p.excerpt || U.excerpt(p.body, 140) %></p></li><% }) %>
+  <% pages.forEach(p => { %><li><span class="chip">Halaman</span><a href="/halaman/<%= p.slug %>"><%= p.title %></a></li><% }) %>
+  </ul><% } %>
+</div></section>
+</main>
+<%- include('../partials/footer') %>

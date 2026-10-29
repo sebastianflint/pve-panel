@@ -1,0 +1,40 @@
+<footer class="site-footer">
+  <div class="wrap foot-grid">
+    <div>
+      <img src="<%= st.logo || '/img/logo.png' %>" alt="<%= st.site_short || 'DIC' %>" height="44" class="foot-logo">
+      <p class="foot-desc"><%= st.site_name %> adalah penyedia layanan pengadaan barang dan jasa untuk sektor pertambangan, konstruksi, dan perdagangan umum.</p>
+    </div>
+    <div>
+      <h3>Tautan</h3>
+      <ul>
+        <li><a href="/tentang">Tentang Kami</a></li>
+        <li><a href="/lini-bisnis">Lini Bisnis</a></li>
+        <li><a href="/berita">Berita</a></li>
+        <li><a href="/unduhan">Unduhan</a></li>
+        <li><a href="/kontak">Kontak</a></li>
+      </ul>
+    </div>
+    <div>
+      <h3>Lini Bisnis</h3>
+      <ul><% navLines.filter(l => l.category === 'utama').forEach(l => { %><li><a href="/lini-bisnis/<%= l.slug %>"><%= l.title %></a></li><% }) %></ul>
+    </div>
+    <div>
+      <h3>Kontak</h3>
+      <% footerOffices.slice(0,1).forEach(o => { %><p class="foot-addr"><%- U.esc(o.address).replace(/\n/g,'<br>') %></p><% }) %>
+      <p><a href="mailto:<%= st.public_email %>"><%= st.public_email %></a><br><a href="tel:<%= (st.public_phone||'').replace(/[^+\d]/g,'') %>"><%= st.public_phone %></a></p>
+      <% if (footerOffices.length > 1) { %><p class="foot-branch">Cabang: <%= footerOffices.filter(o => o.type !== 'pusat').map(o => o.name.replace('Kantor Cabang ','')).join(', ') %></p><% } %>
+    </div>
+  </div>
+  <div class="foot-bottom"><div class="wrap">
+    <span>&copy; <%= new Date().getFullYear() %> <%= st.site_name %>. Hak cipta dilindungi.</span>
+    <span><a href="/kebijakan-privasi">Kebijakan Privasi</a> &middot; <a href="/sitemap.xml">Peta Situs</a></span>
+  </div></div>
+</footer>
+<% if (st.ga_id) { %>
+<div class="cookie" id="cookie" hidden role="dialog" aria-label="Persetujuan cookie">
+  <p><%= st.cookie_notice %> <a href="/kebijakan-privasi">Selengkapnya</a></p>
+  <div><button class="btn btn-ghost" data-cookie="no">Tolak</button> <button class="btn btn-primary" data-cookie="yes">Setuju</button></div>
+</div>
+<% } %>
+<script src="/js/site.js?v=1" defer></script>
+</body></html>

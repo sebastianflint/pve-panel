@@ -1,0 +1,5 @@
+<%- include("../partials/admin-head") %>
+<h1>Log aktivitas</h1>
+<div class="tablewrap"><table class="table"><thead><tr><th>Waktu (UTC)</th><th>Pengguna</th><th>Aksi</th><th>Objek</th><th>Detail</th><th>IP</th></tr></thead><tbody>
+<% rows.forEach(r => { %><tr><td><small><%= r.created_at %></small></td><td><%= r.user_name || '-' %></td><td><%= r.action %></td><td><%= r.entity || '' %> <%= r.entity_id || '' %></td><td><%= r.detail || '' %></td><td><small><%= r.ip %></small></td></tr><% }) %></tbody></table></div>
+<%- include("../partials/admin-foot") %>

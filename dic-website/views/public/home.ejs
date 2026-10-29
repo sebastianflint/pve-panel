@@ -1,0 +1,87 @@
+<%- include('../partials/head') %>
+<body class="home">
+<%- include('../partials/header') %>
+<main id="konten">
+<% if (slides.length) { %>
+<section class="hero" aria-roledescription="carousel" aria-label="Sorotan">
+  <% slides.forEach((s, i) => { %>
+  <div class="slide<%= i === 0 ? ' active' : '' %>" data-slide <%- i > 0 ? 'aria-hidden="true"' : '' %>>
+    <% if (s.image) { %><img src="<%= s.image %>" alt="" <%= i === 0 ? 'fetchpriority=high' : 'loading=lazy' %>><% } %>
+    <div class="wrap slide-body">
+      <h1 class="<%= i === 0 ? '' : 'h1' %>"><%= s.title %></h1>
+      <% if (s.subtitle) { %><p><%= s.subtitle %></p><% } %>
+      <% if (s.cta_label && U.safeUrl(s.cta_url)) { %><a class="btn btn-primary btn-lg" href="<%= U.safeUrl(s.cta_url) %>" data-event="cta_hero"><%= s.cta_label %> <%- icon('arrow') %></a><% } %>
+    </div>
+  </div>
+  <% }) %>
+  <% if (slides.length > 1) { %>
+  <div class="hero-ctl wrap">
+    <% slides.forEach((s, i) => { %><button class="dot<%= i === 0 ? ' on' : '' %>" data-goto="<%= i %>" aria-label="Slide <%= i + 1 %>"></button><% }) %>
+    <button class="pp" data-pause aria-label="Jeda slide">II</button>
+  </div>
+  <% } %>
+</section>
+<% } %>
+
+<section class="strip"><div class="wrap strip-in">
+  <span class="strip-label">Sektor yang kami layani</span>
+  <ul><% sectors.forEach(s => { %><li><%= s %></li><% }) %></ul>
+</div></section>
+
+<section class="section"><div class="wrap two">
+  <div>
+    <p class="eyebrow">Tentang DIC</p>
+    <h2>Mitra pengadaan barang dan jasa yang terpercaya</h2>
+    <p class="lead"><%= st.about_intro %></p>
+    <p><a class="btn btn-outline" href="/tentang">Kenali Kami <%- icon('arrow') %></a>
+    <% if (doc) { %> <a class="btn btn-link" href="/unduh/<%= doc.id %>" data-event="download_company_profile"><%- icon('download') %> Unduh Company Profile</a><% } %></p>
+  </div>
+  <figure class="photo"><img src="/img/tim-lapangan.jpg" alt="Tim lapangan DIC dengan perlengkapan K3" loading="lazy"></figure>
+</div></section>
+
+<% if (highlights.length) { %>
+<section class="section tint"><div class="wrap">
+  <p class="eyebrow">Keunggulan</p><h2>Mengapa bermitra dengan DIC</h2>
+  <div class="grid g3">
+    <% highlights.forEach(h => { %><article class="card feature"><span class="ico-wrap"><%- icon(h.icon || 'spark') %></span><h3><%= h.title %></h3><p><%= h.body %></p></article><% }) %>
+  </div>
+</div></section>
+<% } %>
+
+<section class="section"><div class="wrap">
+  <div class="sec-head"><div><p class="eyebrow">Lini Bisnis</p><h2>Layanan untuk kebutuhan industri Anda</h2></div><a class="btn btn-link" href="/lini-bisnis">Semua lini bisnis <%- icon('arrow') %></a></div>
+  <div class="grid g4">
+    <% lines.forEach(l => { %>
+    <a class="card line" href="/lini-bisnis/<%= l.slug %>">
+      <span class="arch"><%- icon(l.icon || 'layers') %></span>
+      <h3><%= l.title %></h3><p><%= l.summary %></p><span class="more">Selengkapnya <%- icon('arrow') %></span>
+    </a>
+    <% }) %>
+  </div>
+</div></section>
+
+<% if (projects.length) { %>
+<section class="section tint"><div class="wrap">
+  <p class="eyebrow">Rekam Jejak</p><h2>Proyek yang pernah kami kerjakan</h2>
+  <div class="grid g2">
+    <% projects.forEach(p => { %><article class="card project">
+      <% if (p.image) { %><img src="<%= p.image %>" alt="" loading="lazy"><% } %>
+      <div class="pad"><span class="chip"><%= p.period %></span><h3><%= p.title %></h3><p><%= p.summary %></p>
+      <p class="meta"><%- icon('pin','sm') %> <%= p.location_public %></p></div></article><% }) %>
+  </div>
+</div></section>
+<% } %>
+
+<section class="section"><div class="wrap">
+  <div class="sec-head"><div><p class="eyebrow">Berita</p><h2>Informasi terbaru</h2></div><a class="btn btn-link" href="/berita">Semua berita <%- icon('arrow') %></a></div>
+  <% if (posts.length) { %><div class="grid g3"><% posts.forEach(p => { %><%- include('post-card', { p }) %><% }) %></div>
+  <% } else { %><p class="muted">Belum ada berita.</p><% } %>
+</div></section>
+
+<section class="cta-band"><div class="wrap cta-in">
+  <div><h2>Butuh mitra pengadaan, logistik, atau konstruksi?</h2><p>Sampaikan kebutuhan Anda. Tim kami menindaklanjuti dalam <%= st.response_target %>.</p></div>
+  <a class="btn btn-light btn-lg" href="/kontak" data-event="cta_hubungi_kami">Hubungi Kami</a>
+</div></section>
+</main>
+<script type="application/ld+json"><%- JSON.stringify({ '@context': 'https://schema.org', '@type': 'Organization', name: st.site_name, alternateName: st.site_short, url: baseUrl, logo: baseUrl + (st.logo || '/img/logo.png'), email: st.public_email, telephone: st.public_phone, address: footerOffices[0] ? { '@type': 'PostalAddress', streetAddress: footerOffices[0].address.replace(/\n/g, ', '), addressCountry: 'ID' } : undefined }).replace(/</g, '\\u003c') %></script>
+<%- include('../partials/footer') %>

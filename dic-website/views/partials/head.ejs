@@ -1,0 +1,27 @@
+<%
+  const m = (typeof meta !== 'undefined' && meta) || {};
+  const pageTitle = m.title ? m.title + ' | ' + (st.site_short || 'DIC') : (st.site_name || 'PT Dahana Investama Corp');
+  const canonical = baseUrl + (m.path === '/' ? '' : (m.path || ''));
+  const img = (m.image || '/img/og-default.jpg'); const imgAbs = /^https?:/.test(img) ? img : baseUrl + img;
+%><!doctype html>
+<html lang="<%= lang || 'id' %>">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title><%= pageTitle %></title>
+<meta name="description" content="<%= m.description || '' %>">
+<% if (m.noindex) { %><meta name="robots" content="noindex, nofollow"><% } %>
+<link rel="canonical" href="<%= canonical %>">
+<meta property="og:site_name" content="<%= st.site_name %>">
+<meta property="og:title" content="<%= pageTitle %>">
+<meta property="og:description" content="<%= m.description || '' %>">
+<meta property="og:type" content="<%= m.type || 'website' %>">
+<meta property="og:url" content="<%= canonical %>">
+<meta property="og:image" content="<%= imgAbs %>">
+<meta name="twitter:card" content="summary_large_image">
+<% if (st.gsc_verification) { %><meta name="google-site-verification" content="<%= st.gsc_verification %>"><% } %>
+<link rel="icon" href="/img/favicon.png" type="image/png">
+<link rel="stylesheet" href="/vendor/inter/index.css">
+<link rel="stylesheet" href="/css/site.css?v=1">
+<% if (st.ga_id) { %><meta name="ga-id" content="<%= st.ga_id %>"><% } %>
+</head>

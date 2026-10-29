@@ -1,0 +1,13 @@
+<%- include('../partials/head') %>
+<body>
+<%- include('../partials/header') %>
+<main id="konten">
+<section class="page-hero"><div class="wrap"><nav class="crumb" aria-label="Breadcrumb"><a href="/">Beranda</a> / Unduhan</nav><h1>Unduhan</h1><p class="lead">Dokumen resmi perusahaan.</p></div></section>
+<section class="section"><div class="wrap narrow-l">
+  <% docs.forEach(d => { %><article class="card doc"><span class="ico-wrap"><%- icon('download') %></span><div><h3><%= d.title %></h3><p><%= d.description %></p>
+    <p class="meta"><%= d.version ? 'Versi ' + d.version : '' %><%= d.effective_date ? ' · berlaku ' + U.dateId(d.effective_date) : '' %> · <%= (d.lang || 'id').toUpperCase() %></p></div>
+    <a class="btn btn-primary" href="/unduhan/<%= d.id %>" data-event="download_<%= d.gated ? 'form' : 'direct' %>">Unduh</a></article><% }) %>
+  <% if (!docs.length) { %><p class="muted">Belum ada dokumen yang tersedia.</p><% } %>
+</div></section>
+</main>
+<%- include('../partials/footer') %>

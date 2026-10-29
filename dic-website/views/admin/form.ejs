@@ -1,0 +1,43 @@
+<% const withEditor = r.fields.some(f => f.type === 'richtext'); %>
+<%- include('../partials/admin-head', { withEditor }) %>
+<div class="head"><h1><%= title %></h1>
+<% if (!isNew && r.publicPath) { %><a class="btn" href="<%= r.publicPath(row) %>?preview=1" target="_blank" rel="noopener">Pratinjau</a><% } %></div>
+<% if (!isNew) { %><p class="hint">Status: <span class="badge <%= row.status %>"><%= STATUS[row.status] %></span> &middot; diubah <%= row.updated_at %> UTC</p><% } %>
+<form method="post" enctype="multipart/form-data" class="card form wide" id="cms-form" action="/admin/c/<%= rkey %>/<%= isNew ? 'baru' : row.id %>">
+  <input type="hidden" name="_csrf" value="<%= csrf %>">
+  <% r.fields.forEach(f => { const v = row[f.name]; %>
+  <div class="fld">
+    <% if (f.type === 'bool') { %>
+      <label class="inl"><input type="checkbox" name="<%= f.name %>" value="1" <%= v ? 'checked' : '' %>> <%= f.label %></label>
+    <% } else { %>
+      <label for="f_<%= f.name %>"><%= f.label %><%= f.required ? ' *' : '' %></label>
+      <% if (f.type === 'text' || f.type === 'date' || f.type === 'number') { %>
+        <input id="f_<%= f.name %>" name="<%= f.name %>" type="<%= f.type %>" value="<%= v ?? '' %>" <%= f.max ? 'maxlength=' + f.max : '' %> <%= f.required ? 'required' : '' %>>
+      <% } else if (f.type === 'textarea') { %>
+        <textarea id="f_<%= f.name %>" name="<%= f.name %>" rows="<%= f.rows || 3 %>" <%= f.max ? 'maxlength=' + f.max : '' %>><%= v ?? '' %></textarea>
+      <% } else if (f.type === 'select') { %>
+        <select id="f_<%= f.name %>" name="<%= f.name %>"><% f.options.forEach(o => { %><option value="<%= o.value %>" <%= String(v ?? f.options[0].value) === o.value ? 'selected' : '' %>><%= o.label %></option><% }) %></select>
+      <% } else if (f.type === 'richtext') { %>
+        <div class="editor-box"><div class="editor" data-target="f_<%= f.name %>"><%- v || '' %></div></div>
+        <input type="hidden" id="f_<%= f.name %>" name="<%= f.name %>">
+      <% } else if (f.type === 'image' || f.type === 'file') { %>
+        <% if (v) { %><div class="cur"><% if (f.type === 'image') { %><img src="<%= v %>" alt="" height="70"><% } else { %><a href="<%= v %>" target="_blank">File saat ini</a><% } %> <label class="inl"><input type="checkbox" name="_remove_<%= f.name %>" value="1"> hapus</label></div><% } %>
+        <input id="f_<%= f.name %>" type="file" name="<%= f.name %>" accept="<%= f.type === 'image' ? 'image/jpeg,image/png,image/webp' : '.pdf,.docx,.pptx' %>">
+        <% if (f.type === 'image' && media.length) { %><select name="<%= f.name %>__existing" class="sm"><option value="">atau pilih dari pustaka media</option><% media.forEach(m => { %><option value="<%= m.filename %>"><%= m.original %></option><% }) %></select><% } %>
+      <% } %>
+      <% if (f.help) { %><small class="hint"><%= f.help %></small><% } %>
+    <% } %>
+  </div>
+  <% }) %>
+  <% if (r.slugFrom && !isNew) { %><p class="hint">Slug: <code><%= row.slug %></code></p><% } %>
+  <% if (r.wf) { %><div class="fld"><label for="f_publish_at">Jadwal tayang (opsional, WIB)</label><input id="f_publish_at" type="datetime-local" name="publish_at" value="<%= U.utcToWib(row.publish_at) %>"><small class="hint">Kosongkan untuk tayang segera setelah dipublikasikan. Hanya berlaku saat status Tayang.</small></div><% } %>
+  <div class="actions">
+    <button class="btn" name="action" value="draft">Simpan draft</button>
+    <button class="btn" name="action" value="review">Kirim untuk review</button>
+    <% if (can('reviewer')) { %><button class="btn primary" name="action" value="publish">Simpan dan tayangkan</button><% } %>
+    <% if (!isNew && (can('reviewer') || row.status === 'draft')) { %><button class="btn danger" formaction="/admin/c/<%= rkey %>/<%= row.id %>/hapus" data-confirm="Hapus data ini?">Hapus</button><% } %>
+    <a class="btn" href="/admin/c/<%= rkey %>">Batal</a>
+  </div>
+  <% if (!can('reviewer')) { %><p class="hint">Sebagai Editor, perubahan masuk ke antrean review. Konten yang sudah tayang akan menunggu persetujuan Reviewer/Publisher sebelum tayang kembali.</p><% } %>
+</form>
+<%- include('../partials/admin-foot', { withEditor }) %>

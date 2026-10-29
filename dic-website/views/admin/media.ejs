@@ -1,0 +1,12 @@
+<%- include("../partials/admin-head") %>
+<h1>Pustaka media</h1>
+<form method="post" enctype="multipart/form-data" class="card form wide"><input type="hidden" name="_csrf" value="<%= csrf %>">
+  <label>Unggah file (JPG, PNG, WebP, GIF, PDF, DOCX, PPTX; maks. 10 MB)<input type="file" name="files" multiple accept="image/*,.pdf,.docx,.pptx"></label>
+  <p class="hint">Pastikan Anda memiliki izin pakai foto (wajah orang, merek pihak ketiga) sebelum menayangkannya (Assessment A#13, A#21).</p>
+  <div class="actions"><button class="btn primary">Unggah</button></div></form>
+<div class="media-grid"><% items.forEach(m => { %><figure class="card"><% if (isImage(m.filename)) { %><img src="/uploads/<%= m.filename %>" alt="<%= m.alt || '' %>" loading="lazy"><% } else { %><div class="docico">FILE</div><% } %>
+<figcaption><small><%= m.original %></small><br><code>/uploads/<%= m.filename %></code>
+<form method="post" action="/admin/media/<%= m.id %>/alt"><input type="hidden" name="_csrf" value="<%= csrf %>"><input name="alt" value="<%= m.alt || '' %>" placeholder="Teks alternatif"><button class="btn sm">Simpan</button></form>
+<% if (can('reviewer')) { %><form method="post" action="/admin/media/<%= m.id %>/hapus"><input type="hidden" name="_csrf" value="<%= csrf %>"><button class="btn sm danger" data-confirm="Hapus file ini? Halaman yang memakainya akan kehilangan gambar.">Hapus</button></form><% } %></figcaption></figure><% }) %>
+<% if (!items.length) { %><p class="muted">Belum ada file.</p><% } %></div>
+<%- include("../partials/admin-foot") %>

@@ -1,0 +1,15 @@
+<%- include("../partials/admin-head") %>
+<h1>Pengguna</h1>
+<div class="tablewrap"><table class="table"><thead><tr><th>Nama</th><th>Email</th><th>Peran</th><th>Pesan masuk</th><th>Status</th><th>Login terakhir</th></tr></thead><tbody>
+<% users.forEach(u => { %><tr><td><a href="/admin/pengguna/<%= u.id %>"><strong><%= u.name %></strong></a></td><td><%= u.email %></td><td><%= ROLES[u.role] %></td><td><%= u.can_submissions || u.role === 'admin' ? 'Ya' : '-' %></td><td><%= u.active ? 'Aktif' : 'Nonaktif' %></td><td><small><%= u.last_login || '-' %></small></td></tr><% }) %></tbody></table></div>
+<h2><%= edit ? 'Ubah pengguna' : 'Tambah pengguna' %></h2>
+<form method="post" class="card form" style="max-width:560px"><input type="hidden" name="_csrf" value="<%= csrf %>"><input type="hidden" name="id" value="<%= edit ? edit.id : '' %>">
+  <label>Nama<input name="name" value="<%= edit ? edit.name : '' %>" required></label>
+  <label>Email<input type="email" name="email" value="<%= edit ? edit.email : '' %>" required></label>
+  <label>Peran<select name="role"><% Object.entries(ROLES).forEach(([k, v]) => { %><option value="<%= k %>" <%= edit && edit.role === k ? 'selected' : '' %>><%= v %></option><% }) %></select></label>
+  <label class="inl"><input type="checkbox" name="can_submissions" value="1" <%= edit && edit.can_submissions ? 'checked' : '' %>> Boleh melihat pesan masuk (PIC inquiry)</label>
+  <% if (edit) { %><label class="inl"><input type="checkbox" name="active" value="1" <%= edit.active ? 'checked' : '' %>> Aktif</label><% } else { %><input type="hidden" name="active" value="1"><% } %>
+  <label><%= edit ? 'Reset password (kosongkan bila tidak diubah)' : 'Password awal (min. 12 karakter)' %><input type="password" name="password" minlength="12" autocomplete="new-password" <%= edit ? '' : 'required' %>></label>
+  <p class="hint">Pengguna wajib mengganti password saat login pertama. Peran: Editor menulis dan mengirim review; Reviewer/Publisher menayangkan; Admin mengelola pengaturan dan pengguna.</p>
+  <div class="actions"><button class="btn primary">Simpan</button><% if (edit) { %><a class="btn" href="/admin/pengguna">Batal</a><% } %></div></form>
+<%- include("../partials/admin-foot") %>

@@ -1,0 +1,8 @@
+<%- include('../partials/head') %>
+<body>
+<%- include('../partials/header') %>
+<main id="konten">
+<section class="page-hero"><div class="wrap"><nav class="crumb" aria-label="Breadcrumb"><a href="/">Beranda</a> / <%= page.title %></nav><h1><%= page.title %></h1><% if (page.summary) { %><p class="lead"><%= page.summary %></p><% } %></div></section>
+<section class="section"><div class="wrap narrow-l"><div class="prose"><%- page.body %></div></div></section>
+</main>
+<%- include('../partials/footer') %>

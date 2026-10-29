@@ -1,0 +1,20 @@
+<%- include('../partials/head') %>
+<body>
+<%- include('../partials/header') %>
+<main id="konten">
+<section class="page-hero"><div class="wrap"><nav class="crumb" aria-label="Breadcrumb"><a href="/">Beranda</a> / <a href="/lini-bisnis">Lini Bisnis</a> / <%= line.title %></nav>
+  <h1><%= line.title %></h1><p class="lead"><%= line.summary %></p>
+  <% if (line.realisasi !== 'aktif') { %><span class="chip rencana"><%= line.realisasi === 'rencana' ? 'Rencana ekspansi' : 'Melalui mitra' %></span><% } %></div></section>
+<section class="section"><div class="wrap two top">
+  <div>
+    <div class="prose"><%- line.body %></div>
+    <% if (items.length) { %><h2 class="h3">Cakupan layanan</h2><ul class="tick big"><% items.forEach(i => { %><li><%= i %></li><% }) %></ul><% } %>
+    <p><a class="btn btn-primary" href="/kontak" data-event="cta_hubungi_kami">Tanya tentang layanan ini</a></p>
+  </div>
+  <aside>
+    <% if (line.image) { %><figure class="photo"><img src="<%= line.image %>" alt="<%= line.title %>" loading="lazy"></figure><% } %>
+    <div class="card pad side"><h3>Lini bisnis lainnya</h3><ul class="plain"><% others.forEach(o => { %><li><a href="/lini-bisnis/<%= o.slug %>"><%- icon(o.icon || 'layers','sm') %> <%= o.title %></a></li><% }) %></ul></div>
+  </aside>
+</div></section>
+</main>
+<%- include('../partials/footer') %>

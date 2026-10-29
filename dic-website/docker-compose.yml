@@ -1,0 +1,9 @@
+services:
+  dic-web:
+    build: .
+    restart: unless-stopped
+    env_file: .env          # salin dari example.env
+    ports: ["127.0.0.1:3000:3000"]   # taruh reverse proxy HTTPS (Caddy/Nginx) di depannya
+    volumes: ["dic-data:/data"]
+volumes:
+  dic-data:

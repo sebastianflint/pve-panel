@@ -1,0 +1,16 @@
+<%- include("../partials/admin-head") %>
+<h1>Dashboard</h1>
+<% if (!launchReady) { %><div class="flash warn">Situs belum ditandai <strong>siap tayang</strong>: mesin pencari diminta tidak mengindeks. Aktifkan di Pengaturan situs setelah seluruh konten dan izin publikasi disetujui DIC.</div><% } %>
+<div class="cards">
+  <section class="card"><h2>Menunggu review (<%= pending.length %>)</h2>
+    <% if (!pending.length) { %><p class="muted">Tidak ada konten yang menunggu review.</p><% } else { %>
+    <ul class="list"><% pending.forEach(p => { %><li><a href="/admin/c/<%= p.key %>/<%= p.id %>"><%= p.t %></a><small><%= p.label %> &middot; <%= p.updated_at %> UTC</small></li><% }) %></ul><% } %>
+    <% if (!can('reviewer')) { %><p class="hint">Hanya Reviewer/Publisher yang dapat menayangkan konten.</p><% } %></section>
+  <% if (subs) { %><section class="card"><h2>Pesan masuk</h2>
+    <p class="big"><%= subs.unhandled %></p><p>belum ditangani</p>
+    <% if (subs.failed) { %><p class="warn-t">&#9888; <%= subs.failed %> pesan notifikasinya belum terkirim ke email. <a href="/admin/pesan?f=gagal">Tinjau</a></p><% } %>
+    <a class="btn" href="/admin/pesan">Buka pesan</a></section><% } %>
+  <section class="card"><h2>Kesiapan launch</h2><ul class="check"><% checklist.forEach(c => { %><li class="<%= c[1] ? 'ok' : 'no' %>"><%= c[1] ? '✔' : '○' %> <%= c[0] %></li><% }) %></ul>
+    <p class="hint">Manual: naskah privasi disetujui Legal, logo resmi, foto + izin, data proyek/roadmap disetujui Direksi.</p></section>
+</div>
+<%- include("../partials/admin-foot") %>

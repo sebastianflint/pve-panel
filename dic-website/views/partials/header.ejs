@@ -1,0 +1,32 @@
+<a class="skip" href="#konten">Lewati ke konten</a>
+<% if (preview) { %><div class="preview-bar">Mode pratinjau: konten yang belum tayang ikut ditampilkan. <a href="/admin">Kembali ke CMS</a></div><% } %>
+<header class="site-header" id="top">
+  <div class="topbar"><div class="wrap">
+    <span class="topbar-note"><%- icon('clock') %> <%= st.service_hours %></span>
+    <span class="topbar-links">
+      <a href="mailto:<%= st.public_email %>" data-event="click_email"><%- icon('mail') %> <%= st.public_email %></a>
+      <a href="/unduhan">Unduhan</a>
+      <span class="lang" aria-label="Bahasa">ID</span>
+    </span>
+  </div></div>
+  <div class="wrap navbar">
+    <a class="brand" href="/" aria-label="<%= st.site_name %> - Beranda"><img src="<%= st.logo || '/img/logo.png' %>" alt="<%= st.site_short || 'DIC' %>" height="44"><span class="brand-text"><strong><%= st.site_name %></strong><small>Pengadaan Barang dan Jasa</small></span></a>
+    <button class="nav-toggle" aria-expanded="false" aria-controls="menu" aria-label="Buka menu"><%- icon('menu') %></button>
+    <nav id="menu" class="menu" aria-label="Navigasi utama">
+      <ul>
+        <li><a href="/" class="<%= meta.path === '/' ? 'on' : '' %>">Beranda</a></li>
+        <li><a href="/tentang" class="<%= meta.path === '/tentang' ? 'on' : '' %>">Tentang Kami</a></li>
+        <li class="has-sub">
+          <a href="/lini-bisnis" class="<%= (meta.path || '').startsWith('/lini-bisnis') ? 'on' : '' %>">Lini Bisnis <%- icon('chevron','sm') %></a>
+          <% if (navLines.length) { %><ul class="sub">
+            <% navLines.forEach(l => { %><li><a href="/lini-bisnis/<%= l.slug %>"><%= l.title %></a></li><% }) %>
+          </ul><% } %>
+        </li>
+        <li><a href="/berita" class="<%= (meta.path || '').startsWith('/berita') ? 'on' : '' %>">Berita</a></li>
+        <li><a href="/kontak" class="<%= meta.path === '/kontak' ? 'on' : '' %>">Kontak</a></li>
+      </ul>
+      <form class="search" action="/cari" role="search"><label class="sr" for="q">Cari</label><input id="q" name="q" type="search" placeholder="Cari di website" maxlength="80"><button aria-label="Cari"><%- icon('search') %></button></form>
+      <a class="btn btn-primary nav-cta" href="/kontak" data-event="cta_hubungi_kami">Hubungi Kami</a>
+    </nav>
+  </div>
+</header>

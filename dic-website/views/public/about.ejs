@@ -1,0 +1,49 @@
+<%- include('../partials/head') %>
+<body>
+<%- include('../partials/header') %>
+<main id="konten">
+<section class="page-hero"><div class="wrap"><nav class="crumb" aria-label="Breadcrumb"><a href="/">Beranda</a> / Tentang Kami</nav><h1>Tentang Kami</h1></div></section>
+
+<section class="section"><div class="wrap two">
+  <div><p class="eyebrow">Profil Perusahaan</p><h2><%= st.site_name %></h2><p class="lead"><%= st.about_intro %></p></div>
+  <figure class="photo"><img src="/img/hero-kapal.jpg" alt="Kapal dan muatan karung di pelabuhan" loading="lazy"></figure>
+</div></section>
+
+<section class="section tint" id="visi-misi"><div class="wrap">
+  <div class="two vm">
+    <div class="vision"><p class="eyebrow">Visi</p><p class="vision-text"><%= st.visi %></p></div>
+    <div><p class="eyebrow">Misi</p>
+      <ol class="mission"><% misi.forEach((m, i) => { %><li><span class="num"><%= i + 1 %></span><span><%= m %></span></li><% }) %></ol>
+    </div>
+  </div>
+</div></section>
+
+<% if (roadmap.length) { %>
+<section class="section" id="roadmap"><div class="wrap">
+  <p class="eyebrow">Roadmap Bisnis</p><h2>Perjalanan dan rencana pertumbuhan</h2>
+  <p class="lead"><%= st.roadmap_intro %></p>
+  <ol class="timeline">
+    <% roadmap.forEach(r => { %>
+    <li class="<%= r.kind %>"><span class="year"><%= r.year %></span><div><p><%= r.title %></p><span class="chip <%= r.kind %>"><%= r.kind === 'rencana' ? 'Rencana' : 'Terealisasi' %></span></div></li>
+    <% }) %>
+  </ol>
+</div></section>
+<% } %>
+
+<% if (projects.length) { %>
+<section class="section tint" id="rekam-jejak"><div class="wrap">
+  <p class="eyebrow">Rekam Jejak</p><h2>Jejak langkah dan pencapaian</h2>
+  <div class="grid g2"><% projects.forEach(p => { %><article class="card project">
+    <% if (p.image) { %><img src="<%= p.image %>" alt="" loading="lazy"><% } %>
+    <div class="pad"><span class="chip"><%= p.period %></span><h3><%= p.title %></h3><p><%= p.summary %></p><p class="meta"><%- icon('pin','sm') %> <%= p.location_public %></p>
+    <% if (p.as_of) { %><p class="src">Data per <%= U.dateId(p.as_of) %><%= p.source ? ' · ' + p.source : '' %></p><% } %></div></article><% }) %></div>
+</div></section>
+<% } %>
+
+<section class="section"><div class="wrap">
+  <p class="eyebrow">Kantor</p><h2>Lokasi kami</h2>
+  <div class="grid g3"><% footerOffices.forEach(o => { %><article class="card office"><span class="chip"><%= o.type === 'pusat' ? 'Kantor Pusat' : 'Cabang' %></span><h3><%= o.name %></h3><p><%- U.esc(o.address).replace(/\n/g, '<br>') %></p></article><% }) %></div>
+  <p><a class="btn btn-outline" href="/kontak">Hubungi Kami <%- icon('arrow') %></a></p>
+</div></section>
+</main>
+<%- include('../partials/footer') %>
