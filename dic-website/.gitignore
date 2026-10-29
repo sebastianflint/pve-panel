@@ -1,8 +1,0 @@
-node_modules
-uploads/*
-!uploads/.gitkeep
-data/*.db*
-.env
-sandbox-report
-lh-report
-sandbox.log

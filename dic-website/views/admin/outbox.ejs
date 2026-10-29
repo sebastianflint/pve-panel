@@ -1,6 +1,0 @@
-<%- include("../partials/admin-head") %>
-<h1>Outbox sandbox</h1><p class="hint">Email yang akan dikirim SMTP ditangkap di sini (hanya mode sandbox, hilang saat restart).</p>
-<div class="tablewrap"><table class="table"><thead><tr><th>Waktu</th><th>Kepada</th><th>Subjek</th><th>Isi</th></tr></thead><tbody>
-<% rows.forEach(m => { %><tr><td><small><%= m.at %></small></td><td><%= m.to %></td><td><%= m.subject %></td><td style="white-space:pre-wrap"><small><%= m.text.slice(0, 400) %></small></td></tr><% }) %>
-<% if (!rows.length) { %><tr><td colspan="4" class="muted">Belum ada email.</td></tr><% } %></tbody></table></div>
-<%- include("../partials/admin-foot") %>

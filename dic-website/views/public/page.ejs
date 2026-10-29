@@ -1,8 +1,0 @@
-<%- include('../partials/head') %>
-<body>
-<%- include('../partials/header') %>
-<main id="konten">
-<section class="page-hero"><div class="wrap"><nav class="crumb" aria-label="<%= __('Breadcrumb') %>"><a href="<%= u('/') %>"><%= __("Beranda") %></a> / <%= c(page,'title') %></nav><h1><%= c(page,'title') %></h1><% if (c(page,'summary')) { %><p class="lead"><%= c(page,'summary') %></p><% } %></div></section>
-<section class="section"><div class="wrap narrow-l"><div class="prose"><%- c(page,'body') %></div></div></section>
-</main>
-<%- include('../partials/footer') %>

@@ -1,6 +1,0 @@
-<article class="card post">
-  <a href="<%= u('/berita/' + (p.slug)) %>" class="thumb" aria-hidden="true" tabindex="-1"><% if (p.image) { %><img <%- imgAttrs(p.image, '(min-width:980px) 380px, (min-width:620px) 45vw, 92vw') %> alt="" loading="lazy"><% } else { %><span class="ph"><%- icon('layers') %></span><% } %></a>
-  <div class="pad"><span class="chip"><%= CAT_NEWS[p.category] || p.category %></span> <time datetime="<%= p.published_at %>"><%= dateL(p.published_at) %></time>
-  <h3><a href="<%= u('/berita/' + (p.slug)) %>"><%= c(p,'title') %></a></h3>
-  <p><%= c(p,'excerpt') || U.excerpt(c(p,'body'), 120) %></p></div>
-</article>
