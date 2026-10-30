@@ -47,7 +47,7 @@ export async function startMockPve({ port = 0 } = {}) {
   // ---- Setup check state ---------------------------------------------------------
   const VM_PRIVS = ['VM.Audit', 'VM.PowerMgmt', 'VM.Console', 'VM.Snapshot', 'VM.Snapshot.Rollback', 'VM.GuestAgent.Audit',
     'VM.GuestAgent.Unrestricted', 'VM.Allocate', 'VM.Clone', 'VM.Config.CPU', 'VM.Config.Memory', 'VM.Config.Disk',
-    'VM.Config.Cloudinit', 'VM.Config.Options', 'VM.Config.Network'];
+    'VM.Config.Cloudinit', 'VM.Config.Options', 'VM.Config.Network', 'VM.Backup', 'VM.Config.HWType', 'VM.Config.CDROM'];
   const perms = {
     '/pool/customers': [...VM_PRIVS], '/pool/templates': ['VM.Audit', 'VM.Clone'],
     '/vms/9000': ['VM.Audit', 'VM.Clone'], '/vms/9001': ['VM.Audit', 'VM.Clone'], '/vms/9100': ['VM.Audit', 'VM.Clone'],
@@ -69,7 +69,26 @@ export async function startMockPve({ port = 0 } = {}) {
     return out;
   };
   const cluster = { firewall: { enable: 1 } };
-  const storageStatus = { VMStorage: { total: 500 * 2 ** 30, avail: 300 * 2 ** 30, active: 1 }, 'local-lvm': { total: 100 * 2 ** 30, avail: 60 * 2 ** 30, active: 1 } };
+  // ---- Simulated backup storage ("pbs" = Proxmox Backup Server, "local" = directory) ----
+  // backups: volid -> { volid, storage, vmid, ctime, size, notes, protected, cfg, fwRules, fwOptions }
+  const backups = new Map();
+  let lastCtime = 0;
+  const b64 = (s) => Buffer.from(s).toString('base64');
+  const unb64 = (s) => Buffer.from(String(s ?? ''), 'base64').toString('utf8');
+  /** A small file tree per backup: what file restore shows. */
+  const fileTree = (b) => ({
+    '/': [{ text: 'drive-scsi0.img.fidx', type: 'v', leaf: false }],
+    '/drive-scsi0.img.fidx': [{ text: 'etc', type: 'd' }, { text: 'var', type: 'd' }],
+    '/drive-scsi0.img.fidx/etc': [{ text: 'hostname', type: 'f', size: 8 }],
+    '/drive-scsi0.img.fidx/var': [{ text: 'www', type: 'd' }],
+    '/drive-scsi0.img.fidx/var/www': [{ text: 'index.php', type: 'f', size: 42 }, { text: 'uploads', type: 'd' }],
+    '/drive-scsi0.img.fidx/var/www/uploads': [],
+    content: {
+      '/drive-scsi0.img.fidx/etc/hostname': `vm${b.vmid}\n`,
+      '/drive-scsi0.img.fidx/var/www/index.php': `<?php echo "backup of ${b.vmid} at ${b.ctime}";`,
+    },
+  });
+  const storageStatus = { VMStorage: { total: 500 * 2 ** 30, avail: 300 * 2 ** 30, active: 1 }, 'local-lvm': { total: 100 * 2 ** 30, avail: 60 * 2 ** 30, active: 1 }, pbs: { total: 2000 * 2 ** 30, avail: 1500 * 2 ** 30, active: 1 } };
 
   const newMac = () => 'BC:24:11:' + Array.from({ length: 3 }, () => Math.floor(Math.random() * 256).toString(16).padStart(2, '0').toUpperCase()).join(':');
   const withMac = (net) => (!net || /^\w+=[0-9A-Fa-f:]{17}/.test(net) ? net : net.replace(/^(\w+)/, `$1=${newMac()}`));
@@ -175,7 +194,66 @@ export async function startMockPve({ port = 0 } = {}) {
     if (p === '/__vms') return send(res, [...vms.keys()]);
     if (p.startsWith('/__clearfw/')) { const v = vms.get(Number(p.split('/')[2])); v.fwRules = (v.fwRules ?? []).filter(r => r.type !== 'out'); return send(res, 'cleared'); }
     if (p === '/cluster/nextid') { const want = u.searchParams.get('vmid'); if (want) return vms.has(Number(want)) ? send(res,null,400,`VM ${want} already exists`) : send(res, want); let id=100; while (vms.has(id)) id++; return send(res, String(id)); }
-    if (/^\/nodes\/[^/]+\/storage$/.test(p)) return send(res, [{storage:'VMStorage'},{storage:'local-lvm'}]);
+    if (/^\/nodes\/[^/]+\/storage$/.test(p)) {
+      if (u.searchParams.get('content') === 'backup') return send(res, [{ storage: 'pbs', type: 'pbs', content: 'backup', active: 1 }, { storage: 'local', type: 'dir', content: 'backup,iso,vztmpl', active: 1 }]);
+      return send(res, [{storage:'VMStorage'},{storage:'local-lvm'}]);
+    }
+    // ---- backups -------------------------------------------------------------------
+    if (/^\/nodes\/[^/]+\/vzdump$/.test(p) && req.method === 'POST') {
+      const b = await body(req); const vmid = Number(b.vmid); const vm = vms.get(vmid);
+      if (!vm) return send(res, null, 500, `unable to find VM ${vmid}`);
+      if (!['pbs', 'local'].includes(b.storage)) return send(res, null, 500, `storage '${b.storage}' does not exist`);
+      log('VZDUMP', vmid, JSON.stringify(b));
+      return send(res, task('vzdump', vmid, 1200, () => {
+        const ctime = Math.max(Math.floor(Date.now() / 1000), lastCtime + 1); lastCtime = ctime;
+        const stamp = new Date(ctime * 1000).toISOString().replace(/\.\d+Z$/, 'Z');
+        const volid = b.storage === 'pbs' ? `pbs:backup/vm/${vmid}/${stamp}` : `local:backup/vzdump-qemu-${vmid}-${stamp.replace(/[-:]/g, '_')}.vma.zst`;
+        backups.set(volid, { volid, storage: b.storage, vmid, ctime, size: 1_234_567_890, notes: String(b['notes-template'] ?? '').replace('{{guestname}}', vm.name),
+          protected: 0, cfg: JSON.parse(JSON.stringify(vm.cfg)), fwRules: JSON.parse(JSON.stringify(vm.fwRules ?? [])), fwOptions: { ...(vm.fwOptions ?? {}) } });
+      }));
+    }
+    if (/^\/nodes\/[^/]+\/vzdump\/extractconfig$/.test(p)) {
+      const bk = backups.get(u.searchParams.get('volume')); if (!bk) return send(res, null, 500, 'volume does not exist');
+      return send(res, Object.entries(bk.cfg).map(([k, v]) => `${k}: ${v}`).join('\n') + '\n');
+    }
+    const sc = p.match(/^\/nodes\/[^/]+\/storage\/([^/]+)\/content(?:\/(.+))?$/);
+    if (sc && req.method === 'GET' && !sc[2]) {
+      const vmidFilter = u.searchParams.get('vmid');
+      return send(res, [...backups.values()].filter((x) => x.storage === sc[1] && (!vmidFilter || x.vmid === Number(vmidFilter)))
+        .map(({ cfg, fwRules, fwOptions, storage, ...x }) => ({ ...x, content: 'backup', format: storage === 'pbs' ? 'pbs-vm' : 'vma.zst', subtype: 'qemu' })));
+    }
+    if (sc && req.method === 'DELETE' && sc[2]) {
+      const volid = decodeURIComponent(sc[2]);
+      if (!backups.has(volid)) return send(res, null, 500, `volume '${volid}' does not exist`);
+      log('BACKUP DELETE', volid);
+      return send(res, task('imgdel', 0, 300, () => backups.delete(volid)));
+    }
+    const fr = p.match(/^\/nodes\/[^/]+\/storage\/([^/]+)\/file-restore\/(list|download)$/);
+    if (fr) {
+      const bk = backups.get(u.searchParams.get('volume'));
+      if (!bk || fr[1] !== 'pbs') return send(res, null, 500, 'volume does not exist');
+      const tree = fileTree(bk); const fp = unb64(u.searchParams.get('filepath')) || '/';
+      if (fr[2] === 'list') {
+        const entries = tree[fp]; if (!entries) return send(res, null, 500, `path not found: ${fp}`);
+        const base = fp === '/' ? '' : fp;
+        return send(res, entries.map((e) => ({ ...e, filepath: b64(`${base}/${e.text}`), leaf: e.type === 'f', mtime: bk.ctime })));
+      }
+      if (tree.content[fp] !== undefined) { res.writeHead(200, { 'content-type': 'application/octet-stream', 'content-length': Buffer.byteLength(tree.content[fp]) }); return res.end(tree.content[fp]); }
+      if (tree[fp]) { const zip = Buffer.concat([Buffer.from('PK\x03\x04'), Buffer.from(`zip of ${fp}`)]); res.writeHead(200, { 'content-type': 'application/zip' }); return res.end(zip); }
+      return send(res, null, 500, `path not found: ${fp}`);
+    }
+    if (/^\/nodes\/[^/]+\/qemu$/.test(p) && req.method === 'POST') {
+      const b = await body(req); const vmid = Number(b.vmid); const vm = vms.get(vmid); const bk = backups.get(b.archive);
+      if (!bk) return send(res, null, 500, `volume '${b.archive}' does not exist`);
+      if (!vm || String(b.force) !== '1') return send(res, null, 500, `unable to restore VM ${vmid} - VM ${vmid} already exists`);
+      if (vm.status !== 'stopped') return send(res, null, 500, `unable to restore VM ${vmid} - VM is running`);
+      log('RESTORE', vmid, b.archive);
+      vm.lock = 'create';
+      return send(res, task('qmrestore', vmid, 1500, () => {
+        vm.cfg = JSON.parse(JSON.stringify(bk.cfg)); vm.fwRules = JSON.parse(JSON.stringify(bk.fwRules)); vm.fwOptions = { ...bk.fwOptions };
+        vm.maxcpu = Number(vm.cfg.cores) || 1; vm.maxmem = (Number(vm.cfg.memory) || 512) * 2 ** 20; vm.restoredFrom = bk.volid; delete vm.lock;
+      }));
+    }
     if (p === '/cluster/sdn/zones' && req.method==='GET') return send(res, sdn.zones);
     if (p === '/cluster/sdn/zones' && req.method==='POST') { const b = await body(req); log('SDN ZONE', JSON.stringify(b)); sdn.zones.push({zone:b.zone,type:b.type,dhcp:b.dhcp}); sdn.pending++; return send(res,null); }
     if (p === '/cluster/sdn/vnets' && req.method==='GET') return send(res, sdn.vnets);
@@ -309,7 +387,7 @@ export async function startMockPve({ port = 0 } = {}) {
   return {
     url: `http://127.0.0.1:${actualPort}`,
     port: actualPort,
-    vms, sdn, gwFiles, destroyed, perms, cluster, storageStatus,
+    vms, sdn, gwFiles, destroyed, perms, cluster, storageStatus, backups,
     /** GET a control endpoint, e.g. control('/__lose/104/1') */
     control: (p) => fetch(`http://127.0.0.1:${actualPort}/api2/json${p}`, {
       headers: { authorization: 'PVEAPIToken=panel@pve!panel=x' },

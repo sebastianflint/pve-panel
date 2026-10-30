@@ -55,6 +55,16 @@ privilege; add it to the role the same way.
 New servers are placed into the `customers` pool (`PVE_POOL`), so the panel's
 normal permissions cover them automatically.
 
+### Extra permissions for backups
+
+Only if customers should make and restore backups (see [Backups](../features/backups)):
+
+```bash
+pveum role modify PanelCustomer --append 1 --privs "VM.Backup VM.Config.HWType VM.Config.CDROM"
+pveum role add PanelBackup --privs "Datastore.AllocateSpace Datastore.Audit"
+pveum acl modify /storage/pbs --users panel@pve --roles PanelBackup
+```
+
 :::tip Check it
 After preparing Proxmox, open **Setup check** in the admin interface: it lists any
 right that is missing for the features you use, with the command that adds it. See

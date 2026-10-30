@@ -15,6 +15,7 @@ import { startExpiryScheduler } from './expiry.js';
 import { currentScheme } from './appearance.js';
 import { startUpdateTracker } from './winupdate.js';
 import { startSetupCheckScheduler } from './setupcheck.js';
+import { startBackupScheduler } from './backups.js';
 import authPlugin from './auth.js';
 import vmRoutes from './routes/vms.js';
 import consoleRoutes from './routes/console.js';
@@ -162,6 +163,7 @@ bootstrapAdmin(admin.log);
 startExpiryScheduler(admin.log);
 startUpdateTracker(admin.log);
 startSetupCheckScheduler(admin.log);
+startBackupScheduler(admin.log);
 
 await customer.listen({ port: config.port, host: config.host });
 await admin.listen({ port: config.adminPort, host: config.adminHost });

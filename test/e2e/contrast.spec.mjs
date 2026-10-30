@@ -17,6 +17,8 @@ for (const mode of ['light', 'dark']) {
     await customer.request.post(`${C()}/api/auth/login`, { data: { email: 'lena@example.com', password: 'another-long-password' } });
     const visitor = await (await browser.newContext({ colorScheme: mode })).newPage();
 
+    // the Backups tab is measured too
+    await admin.request.put(`${A()}/api/admin/settings/backups`, { data: { enabled: true, storage: 'pbs' } });
     const problems = [];
     const check = async (page, scheme, where) => {
       for (const p of await page.evaluate(audit)) problems.push(`${scheme}/${mode} ${where}: “${p.text}” ${p.ratio}:1 (needs ${p.need}:1)`);
@@ -38,6 +40,10 @@ for (const mode of ['light', 'dark']) {
         await customer.locator('.server-row[data-vmid="101"]').click();
         await expect(customer.locator('.specs')).toBeVisible();
         await check(customer, scheme, 'server page');
+
+        await customer.locator('[data-tab=backups]').click();
+        await expect(customer.locator('#backup-schedule')).toBeVisible();
+        await check(customer, scheme, 'backups');
 
         await customer.locator('#nav-account').click();
         await expect(customer.locator('.security-card').first()).toBeVisible();

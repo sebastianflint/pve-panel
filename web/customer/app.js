@@ -321,6 +321,7 @@ function renderDetail() {
   ].filter(Boolean).join(', ');
   const tabs = [['overview', 'Overview', 'chart'], ['snapshots', 'Snapshots', 'camera'], ['console', 'Console', 'terminal']];
   if (state.account.tailscale) tabs.push(['remote', 'Remote access', 'link']);
+  if (state.account.backups) tabs.push(['backups', 'Backups', 'archive']);
   if (vm.osFamily === 'windows') tabs.push(['updates', 'Updates', 'download']);
 
   $('#detail').innerHTML = `
@@ -358,6 +359,7 @@ function renderTab() {
   if (state.tab === 'console') renderConsole(body);
   if (state.tab === 'remote') renderRemote(body);
   if (state.tab === 'updates') renderUpdates(body);
+  if (state.tab === 'backups') { state.browse = null; renderBackups(body); }
 }
 
 function renderOverview(body) {
@@ -1015,6 +1017,247 @@ $('#detail').addEventListener('submit', async (e) => {
     toast('Installing Windows updates');
     renderUpdates($('#tab-body'));
   } catch (err) { fail(err); b.disabled = false; }
+});
+
+// ---------- backups ----------------------------------------------------------
+const KIND_TEXT = { manual: 'Made by you', scheduled: 'Automatic', 'before-restore': 'Before a restore', provider: 'By your provider' };
+const DAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+const pad2 = (n) => String(n).padStart(2, '0');
+const enc = encodeURIComponent;
+
+/** A schedule in the browser's time → UTC (what the panel stores). */
+function scheduleToUtc(frequency, weekday, time) {
+  const [h, m] = time.split(':').map(Number);
+  const d = new Date();
+  d.setHours(h, m, 0, 0);
+  if (frequency === 'weekly') d.setDate(d.getDate() + ((weekday - d.getDay() + 7) % 7));
+  return { weekday: d.getUTCDay(), hour: d.getUTCHours(), minute: d.getUTCMinutes() };
+}
+function scheduleFromUtc(s) {
+  const d = new Date();
+  d.setUTCHours(s.hour, s.minute, 0, 0);
+  if (s.frequency === 'weekly') d.setUTCDate(d.getUTCDate() + ((s.weekday - d.getUTCDay() + 7) % 7));
+  return { weekday: d.getDay(), time: `${pad2(d.getHours())}:${pad2(d.getMinutes())}` };
+}
+
+async function renderBackups(body) {
+  const vmid = state.selected;
+  if (state.browse) return renderBrowse(body);
+  if (!body.querySelector('.backups')) body.innerHTML = '<p class="muted">Loading backups…</p>';
+  let b;
+  try { b = await api(`/api/vms/${vmid}/backups`); } catch (err) { body.innerHTML = ''; return fail(err); }
+  if (vmid !== state.selected || state.tab !== 'backups' || state.view !== 'server' || state.browse) return;
+  clearTimeout(state.bkTimer);
+  state.backups = b;
+  if (!b.available) {
+    body.innerHTML = '<div class="backups"><p class="muted">Backups are not available for your account. Ask your provider.</p></div>';
+    return;
+  }
+  const j = b.job;
+  const working = j && ['queued', 'running'].includes(j.state);
+  const room = b.used < b.max;
+  const sch = b.schedule ? { ...b.schedule, ...scheduleFromUtc(b.schedule) } : null;
+  const freq = sch?.frequency ?? 'off';
+  body.innerHTML = `
+    <div class="backups">
+      <div class="section-head backups-head">
+        <div>
+          <h2>Backups</h2>
+          <p class="muted small">A backup is a full copy of the server, kept outside it. ${b.used} of ${b.max} backups made by you are in use.</p>
+        </div>
+        <button class="btn primary" data-backup-now ${working || !room ? 'disabled' : ''}>${icon('archive')}<span>Back up now</span></button>
+      </div>
+      ${b.error ? `<div class="notice warn"><p>${esc(b.error)}</p></div>` : ''}
+      ${working ? `<div class="notice backup-progress"><p class="progress-step"><span class="spinner" aria-hidden="true"></span>
+          ${esc(j.action === 'restore' ? `Restoring: ${j.step ?? 'starting'}` : (j.step ?? 'Backing up'))}…</p>
+          <p class="muted small">${j.action === 'restore'
+            ? 'The server is not usable until the restore has finished. You can leave this page.'
+            : 'The server keeps running. You can leave this page; the backup continues.'}</p></div>` : ''}
+      ${!working && j?.state === 'failed' ? `<div class="notice warn"><p><strong>The last ${j.action === 'restore' ? 'restore' : 'backup'} failed:</strong> ${esc(j.error ?? '')}</p></div>` : ''}
+      ${!room && !working ? '<p class="muted small">All your backups for this server are in use. Delete one to make a new backup.</p>' : ''}
+      ${b.backups.length ? `
+        <ul class="snap-list backup-list">
+          ${b.backups.map((x) => `
+            <li data-backup="${esc(x.id)}">
+              <div class="grow">
+                <div><strong>${esc(new Date(x.time).toLocaleString())}</strong>
+                  <span class="tag">${esc(KIND_TEXT[x.kind] ?? x.kind)}</span>
+                  ${x.protected ? '<span class="tag">Protected</span>' : ''}
+                  ${x.verified === 'failed' ? '<span class="tag warn">Verification failed</span>' : ''}</div>
+                <div class="muted small">${x.size ? esc(bytes(x.size)) : ''}${x.verified === 'ok' ? ' · verified' : ''}</div>
+              </div>
+              ${b.fileRestore ? `<button class="btn" data-backup-browse ${working ? 'disabled' : ''}>${icon('folder', { size: 16 })}<span>Browse files</span></button>` : ''}
+              ${b.restore ? `<button class="btn" data-backup-restore ${working ? 'disabled' : ''}>Restore</button>` : ''}
+              ${x.deletable ? `<button class="btn danger" data-backup-delete ${working ? 'disabled' : ''}>Delete</button>` : ''}
+            </li>`).join('')}
+        </ul>` : '<p class="muted">No backups yet.</p>'}
+
+      ${b.schedulesAllowed ? `
+        <form id="backup-schedule" class="schedule-form">
+          <h3 class="small-head">Automatic backups</h3>
+          <div class="schedule-grid">
+            <label>How often
+              <select name="frequency">
+                <option value="off" ${freq === 'off' ? 'selected' : ''}>Off</option>
+                <option value="daily" ${freq === 'daily' ? 'selected' : ''}>Every day</option>
+                <option value="weekly" ${freq === 'weekly' ? 'selected' : ''}>Every week</option>
+              </select>
+            </label>
+            <label data-sched="weekly" ${freq === 'weekly' ? '' : 'hidden'}>Day
+              <select name="weekday">${DAYS.map((d, i) => `<option value="${i}" ${(sch?.weekday ?? 0) === i ? 'selected' : ''}>${d}</option>`).join('')}</select>
+            </label>
+            <label data-sched="on" ${freq === 'off' ? 'hidden' : ''}>Time <input type="time" name="time" value="${esc(sch?.time ?? '03:00')}" required></label>
+            <label data-sched="on" ${freq === 'off' ? 'hidden' : ''}>Keep the newest <input type="number" name="keep" min="1" max="${b.max}" value="${sch?.keep ?? Math.min(3, b.max)}" required></label>
+            <button class="btn">Save</button>
+          </div>
+          <p class="muted small">${sch
+            ? `Next automatic backup: <strong>${esc(new Date(sch.nextRunAt).toLocaleString())}</strong>. Older automatic backups are deleted; the ones you make yourself are kept.`
+            : 'The newest automatic backups are kept; older ones are deleted. The ones you make yourself are never deleted automatically.'}
+            Times are in your time zone.</p>
+          ${sch?.lastError ? `<p class="small warn-text">Last automatic backup: ${esc(sch.lastError)}</p>` : ''}
+        </form>` : ''}
+    </div>`;
+  if (working) state.bkTimer = setTimeout(() => { if (state.tab === 'backups') renderBackups($('#tab-body')); }, 3000);
+}
+
+async function renderBrowse(body) {
+  const vmid = state.selected;
+  const br = state.browse;
+  const here = br.stack.at(-1);
+  body.innerHTML = `
+    <div class="backups">
+      <div class="section-head">
+        <div>
+          <h2>Files in the backup of ${esc(new Date(br.time).toLocaleString())}</h2>
+          <nav class="file-crumbs" aria-label="Folder">${br.stack.map((c, i) => (i === br.stack.length - 1
+            ? `<span>${esc(c.name)}</span>` : `<button class="linklike" data-browse-up="${i}">${esc(c.name)}</button>`)).join('<span class="muted">/</span>')}</nav>
+        </div>
+        <button class="btn ghost" data-browse-close>${icon('back', { size: 16 })}<span>Back to backups</span></button>
+      </div>
+      <p class="muted"><span class="spinner" aria-hidden="true"></span> Opening the backup… The first time can take up to a minute.</p>
+    </div>`;
+  let entries;
+  try {
+    entries = await api(`/api/vms/${vmid}/backups/files?id=${enc(br.volid)}${here.path ? `&path=${enc(here.path)}` : ''}`);
+  } catch (err) {
+    if (state.browse !== br) return;
+    body.querySelector('.backups > p').outerHTML = `<div class="notice warn"><p>${esc(err.message)}</p></div>`;
+    return;
+  }
+  if (state.browse !== br || state.tab !== 'backups' || vmid !== state.selected) return;
+  const link = (e, folder) => `/api/vms/${vmid}/backups/download?id=${enc(br.volid)}&path=${enc(e.path)}${folder ? '&folder=1' : ''}`;
+  body.querySelector('.backups > p').outerHTML = entries.length ? `
+    <ul class="snap-list file-list">
+      ${entries.map((e, i) => `
+        <li>
+          <span class="file-icon">${icon(e.type === 'folder' ? 'folder' : 'file', { size: 18 })}</span>
+          <div class="grow">
+            ${e.type === 'folder' ? `<button class="linklike file-name" data-browse-into="${i}">${esc(e.name)}</button>` : `<span class="file-name">${esc(e.name)}</span>`}
+            <div class="muted small">${e.type === 'file' && e.size !== null ? esc(bytes(e.size)) : ''}${e.mtime ? `${e.type === 'file' ? ' · ' : ''}${esc(new Date(e.mtime * 1000).toLocaleString())}` : ''}</div>
+          </div>
+          ${e.type === 'file' ? `<a class="btn" href="${link(e)}" download>${icon('download', { size: 16 })}<span>Download</span></a>` : ''}
+          ${e.type === 'folder' && br.stack.length > 1 ? `<a class="btn" href="${link(e, true)}" download>${icon('download', { size: 16 })}<span>Download as .zip</span></a>` : ''}
+        </li>`).join('')}
+    </ul>` : '<p class="muted">This folder is empty.</p>';
+  br.entries = entries;
+}
+
+function restoreDialog(backup) {
+  const vm = state.detail;
+  const b = state.backups;
+  const dialog = $('#restore-dialog');
+  const form = dialog.querySelector('form');
+  $('#rs-text').innerHTML = `<strong>Everything on ${esc(vm.name)} is replaced</strong> by the backup of
+    ${esc(new Date(backup.time).toLocaleString())}, including its snapshots. The server is stopped for the restore.`;
+  const room = b.used < b.max;
+  form.backupFirst.checked = room;
+  form.backupFirst.disabled = !room;
+  $('#rs-first-hint').textContent = room
+    ? 'So you can go back if the restore isn\'t what you wanted. It uses one of your backups.'
+    : 'Not possible: all your backups are in use. Delete one first if you want this.';
+  form.start.checked = vm.status === 'running';
+  dialog.returnValue = '';
+  dialog.showModal();
+  return new Promise((resolve) => {
+    dialog.addEventListener('close', () => resolve(dialog.returnValue === 'ok'
+      ? { backupFirst: form.backupFirst.checked, start: form.start.checked } : null), { once: true });
+  });
+}
+
+$('#detail').addEventListener('click', async (e) => {
+  const t = e.target.closest('button');
+  if (!t || state.tab !== 'backups') return;
+  const vmid = state.selected;
+  const body = $('#tab-body');
+  const id = t.closest('[data-backup]')?.dataset.backup;
+  const backup = state.backups?.backups.find((x) => x.id === id);
+
+  if (t.hasAttribute('data-backup-now')) {
+    t.disabled = true;
+    try {
+      await api(`/api/vms/${vmid}/backups`, { method: 'POST' });
+      toast('Backup started');
+    } catch (err) { fail(err); }
+    renderBackups(body);
+  }
+  if (t.hasAttribute('data-backup-delete') && backup) {
+    if (!(await confirmAction(`Delete the backup of ${new Date(backup.time).toLocaleString()}? This can't be undone.`, 'Delete'))) return;
+    t.disabled = true;
+    try {
+      await api(`/api/vms/${vmid}/backups?id=${enc(id)}`, { method: 'DELETE' });
+      toast('Backup deleted');
+    } catch (err) { fail(err); }
+    renderBackups(body);
+  }
+  if (t.hasAttribute('data-backup-restore') && backup) {
+    const choice = await restoreDialog(backup);
+    if (!choice) return;
+    try {
+      await api(`/api/vms/${vmid}/backups/restore`, { method: 'POST', body: { id, ...choice } });
+      toast('Restore started');
+      loadDetail();
+    } catch (err) { fail(err); }
+    renderBackups(body);
+  }
+  if (t.hasAttribute('data-backup-browse') && backup) {
+    state.browse = { volid: id, time: backup.time, stack: [{ name: 'Backup', path: null }] };
+    renderBrowse(body);
+  }
+  if (t.dataset.browseInto !== undefined && state.browse?.entries) {
+    const entry = state.browse.entries[Number(t.dataset.browseInto)];
+    state.browse.stack.push({ name: entry.name, path: entry.path });
+    renderBrowse(body);
+  }
+  if (t.dataset.browseUp !== undefined && state.browse) {
+    state.browse.stack = state.browse.stack.slice(0, Number(t.dataset.browseUp) + 1);
+    renderBrowse(body);
+  }
+  if (t.hasAttribute('data-browse-close')) {
+    state.browse = null;
+    renderBackups(body);
+  }
+});
+
+$('#detail').addEventListener('change', (e) => {
+  if (e.target.name !== 'frequency' || !e.target.closest('#backup-schedule')) return;
+  const f = e.target.closest('#backup-schedule');
+  f.querySelectorAll('[data-sched="on"]').forEach((el) => { el.hidden = e.target.value === 'off'; });
+  f.querySelector('[data-sched="weekly"]').hidden = e.target.value !== 'weekly';
+});
+
+$('#detail').addEventListener('submit', async (e) => {
+  if (e.target.id !== 'backup-schedule') return;
+  e.preventDefault();
+  const f = e.target;
+  const frequency = f.frequency.value;
+  const body = frequency === 'off' ? { frequency }
+    : { frequency, keep: Number(f.keep.value), ...scheduleToUtc(frequency, Number(f.weekday.value), f.time.value) };
+  if (frequency === 'daily') delete body.weekday;
+  try {
+    await api(`/api/vms/${state.selected}/backups/schedule`, { method: 'PUT', body });
+    toast(frequency === 'off' ? 'Automatic backups are off' : 'Automatic backups saved');
+    renderBackups($('#tab-body'));
+  } catch (err) { fail(err); }
 });
 
 // ---------- expiry -----------------------------------------------------------

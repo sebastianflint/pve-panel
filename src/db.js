@@ -213,6 +213,69 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS winupdates_vm ON winupdates(vmid);
 `);
 
+// Backups (Proxmox Backup Server through the Proxmox VE API).
+// assigned_at: since when the server belongs to its current customer. Customers
+// only see backups made after it, so a reused VMID or a reassigned server never
+// shows the previous owner's backups. Kept current by triggers on every insert
+// and owner change (admin interface, CLI, self-service creation).
+addColumn('vms', 'assigned_at', 'TEXT');
+addColumn('users', 'max_backups', 'INTEGER');               // per server; NULL = default from the settings
+db.exec(`
+  UPDATE vms SET assigned_at = COALESCE(
+    (SELECT strftime('%Y-%m-%dT%H:%M:%SZ', MAX(a.created_at)) FROM audit_log a
+      WHERE a.vmid = vms.vmid AND a.action IN ('server_create_started', 'admin_vm_assign')),
+    strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))
+  WHERE assigned_at IS NULL;
+  CREATE TRIGGER IF NOT EXISTS vms_assigned_on_insert AFTER INSERT ON vms WHEN NEW.assigned_at IS NULL
+  BEGIN UPDATE vms SET assigned_at = strftime('%Y-%m-%dT%H:%M:%SZ', 'now') WHERE vmid = NEW.vmid; END;
+  CREATE TRIGGER IF NOT EXISTS vms_assigned_on_owner AFTER UPDATE OF user_id ON vms WHEN NEW.user_id IS NOT OLD.user_id
+  BEGIN UPDATE vms SET assigned_at = strftime('%Y-%m-%dT%H:%M:%SZ', 'now') WHERE vmid = NEW.vmid; END;
+
+  -- Backups made through the panel (customers may delete these; schedules rotate them)
+  CREATE TABLE IF NOT EXISTS backups (
+    volid      TEXT PRIMARY KEY,                 -- e.g. pbs:backup/vm/101/2026-10-30T19:00:00Z
+    vmid       INTEGER NOT NULL,
+    user_id    INTEGER NOT NULL,
+    storage    TEXT NOT NULL,
+    kind       TEXT NOT NULL,                    -- manual | scheduled | before-restore
+    created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))
+  );
+  CREATE INDEX IF NOT EXISTS backups_vm ON backups(vmid);
+
+  -- Backup and restore runs (queued, run in the background, resumed after a restart)
+  CREATE TABLE IF NOT EXISTS backup_jobs (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    vmid        INTEGER NOT NULL,
+    user_id     INTEGER NOT NULL,
+    action      TEXT NOT NULL,                   -- backup | restore
+    kind        TEXT,                            -- for backups: manual | scheduled
+    options     TEXT,                            -- JSON (restore: volid, backupFirst, start)
+    state       TEXT NOT NULL,                   -- queued | running | done | failed
+    step        TEXT,                            -- shown to the customer
+    upid        TEXT,
+    node        TEXT,
+    volid       TEXT,
+    error       TEXT,
+    started_at  TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')),
+    finished_at TEXT
+  );
+  CREATE INDEX IF NOT EXISTS backup_jobs_vm ON backup_jobs(vmid);
+
+  -- Automatic backups per server (times in UTC; the browser converts)
+  CREATE TABLE IF NOT EXISTS backup_schedules (
+    vmid        INTEGER PRIMARY KEY REFERENCES vms(vmid) ON DELETE CASCADE,
+    user_id     INTEGER NOT NULL,
+    frequency   TEXT NOT NULL,                   -- daily | weekly
+    weekday     INTEGER,                         -- 0 = Sunday (UTC), weekly only
+    hour        INTEGER NOT NULL,
+    minute      INTEGER NOT NULL,
+    keep        INTEGER NOT NULL,
+    next_run_at TEXT NOT NULL,
+    last_run_at TEXT,
+    last_error  TEXT
+  );
+`);
+
 // Background jobs don't survive a restart; don't leave servers stuck forever.
 db.exec(`
   UPDATE vms SET state = 'failed', error = 'Setup was interrupted because the panel restarted'

@@ -164,6 +164,35 @@ export async function ensureVpnRules(path, net) {
   });
 }
 
+/**
+ * Puts a server's isolation back in place without duplicating anything, e.g.
+ * after a restore from a backup that was made before a rule existed.
+ */
+export async function ensureIsolation(path, net) {
+  await pve.put(`${path}/firewall/options`, {
+    enable: 1, ipfilter: 1, macfilter: 1, policy_in: 'ACCEPT', policy_out: 'ACCEPT',
+  });
+  const sets = await pve.get(`${path}/firewall/ipset`).catch(() => []);
+  if (!sets.some((s) => s.name === 'ipfilter-net0')) {
+    await pve.post(`${path}/firewall/ipset`, { name: 'ipfilter-net0', comment: 'Managed by the panel' });
+  }
+  const entries = await pve.get(`${path}/firewall/ipset/ipfilter-net0`).catch(() => []);
+  if (!entries.some((e) => e.cidr === net.subnet)) {
+    await pve.post(`${path}/firewall/ipset/ipfilter-net0`, { cidr: net.subnet });
+  }
+  const rules = await pve.get(`${path}/firewall/rules`);
+  if (!rules.some((r) => r.comment === 'panel: allow own network')) {
+    await pve.post(`${path}/firewall/rules`, {
+      type: 'in', action: 'DROP', source: ALL_CUSTOMERS, enable: 1, pos: 0, comment: 'panel: block other customer networks',
+    });
+    await pve.post(`${path}/firewall/rules`, {
+      type: 'in', action: 'ACCEPT', source: net.subnet, enable: 1, pos: 0, comment: 'panel: allow own network',
+    });
+  }
+  await ensureVpnRules(path, net);
+  await ensureEgressRules(path, net);
+}
+
 // ---- Outgoing traffic ---------------------------------------------------------
 
 /** Is this IPv4 address inside one of the CIDRs? */

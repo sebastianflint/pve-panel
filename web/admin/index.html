@@ -81,6 +81,9 @@
         <label>Disk (GB) <input name="maxDiskGb" type="number" min="0" required></label>
       </div>
       <p id="limits-usage" class="muted small"></p>
+      <h3 class="small-head">Backups</h3>
+      <label>Backups per server <input name="maxBackups" type="number" min="0" max="100" placeholder="Default from Settings">
+        <span class="hint">Empty: the default under Settings, Backups. 0: no backups for this customer.</span></label>
       <h3 class="small-head">Expiry</h3>
       <div class="grid-2">
         <label>Servers expire

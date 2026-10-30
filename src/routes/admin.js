@@ -19,6 +19,7 @@ import {
 } from '../mail.js';
 import { sendInvitation, unusablePassword, inviteState } from '../invite.js';
 import { usageOf } from '../provision.js';
+import { backupSettings, saveBackupSettings, backupStorages } from '../backups.js';
 import { networkOf, allNetworks } from '../network.js';
 import { adminOverview, removeDevice, syncGateway } from '../vpn.js';
 import { config } from '../config.js';
@@ -44,7 +45,7 @@ export default async function adminRoutes(app) {
              u.oidc_issuer AS ssoIssuer, u.oidc_subject IS NOT NULL AS ssoLinked,
              (SELECT COUNT(*) FROM passkeys p WHERE p.user_id = u.id) AS passkeyCount,
              u.expiry_mode AS expiryMode, u.expiry_days AS expiryDays, u.expiry_date AS expiryDate,
-             u.expiry_self_extend AS expirySelfExtend,
+             u.expiry_self_extend AS expirySelfExtend, u.max_backups AS maxBackups,
              u.password_set, u.invite_token_hash, u.invite_expires, u.invited_at,
              COUNT(v.vmid) AS servers
       FROM users u LEFT JOIN vms v ON v.user_id = u.id
@@ -179,6 +180,7 @@ export default async function adminRoutes(app) {
           expiryDays: { type: 'integer', minimum: 1, maximum: 3650 },
           expiryDate: { type: 'string', pattern: '^\\d{4}-\\d{2}-\\d{2}$' },
           expirySelfExtend: { type: 'boolean' },
+          maxBackups: { type: ['integer', 'null'], minimum: 0, maximum: 100 },
         },
       },
     },
@@ -200,6 +202,10 @@ export default async function adminRoutes(app) {
     if (typeof isAdmin === 'boolean') {
       db.prepare('UPDATE users SET is_admin = ? WHERE id = ?').run(isAdmin ? 1 : 0, id);
       audit(req, null, isAdmin ? 'admin_grant' : 'admin_revoke', { email: user.email });
+    }
+    if ('maxBackups' in req.body) {
+      db.prepare('UPDATE users SET max_backups = ? WHERE id = ?').run(req.body.maxBackups, id);
+      audit(req, null, 'admin_backup_limit', { email: user.email, maxBackups: req.body.maxBackups });
     }
     if (typeof req.body.totpRequired === 'boolean') {
       db.prepare('UPDATE users SET totp_required = ? WHERE id = ?').run(req.body.totpRequired ? 1 : 0, id);
@@ -378,6 +384,26 @@ export default async function adminRoutes(app) {
   });
 
   // ---- Settings: Windows updates through the panel -----------------------------
+  app.get('/api/admin/settings/backups', async () => ({ settings: backupSettings(), storages: await backupStorages() }));
+  app.put('/api/admin/settings/backups', {
+    schema: {
+      body: {
+        type: 'object', additionalProperties: false,
+        properties: {
+          enabled: { type: 'boolean' },
+          storage: { type: 'string', maxLength: 100, pattern: '^[A-Za-z0-9._-]*$' },
+          maxPerServer: { type: 'integer', minimum: 1, maximum: 100 },
+          schedules: { type: 'boolean' },
+          keepAfterDelete: { type: 'boolean' },
+        },
+      },
+    },
+  }, async (req) => {
+    const settings = saveBackupSettings(req.body);
+    audit(req, null, 'admin_backup_settings', settings);
+    return settings;
+  });
+
   app.get('/api/admin/settings/winupdates', async () => ({ enabled: updatesEnabled() }));
   app.put('/api/admin/settings/winupdates', {
     schema: { body: { type: 'object', required: ['enabled'], additionalProperties: false, properties: { enabled: { type: 'boolean' } } } },

@@ -19,6 +19,7 @@ import { adminOverview } from './vpn.js';
 import { updatesEnabled } from './winupdate.js';
 import { versionInfo, updateStatus } from './version.js';
 import { emailConfigured, sendMail, setupCheckMessage } from './mail.js';
+import { backupSettings, backupStorages } from './backups.js';
 
 export const GROUPS = [
   ['proxmox', 'Proxmox connection'],
@@ -27,6 +28,7 @@ export const GROUPS = [
   ['templates', 'Templates'],
   ['network', 'Customer networks'],
   ['remote', 'Remote access'],
+  ['backups', 'Backups'],
   ['email', 'Email'],
   ['security', 'Security'],
   ['maintenance', 'Updates and backups'],
@@ -181,6 +183,17 @@ async function requirements(ctx) {
   if (config.tailscale.enabled) execNeeds.push('Tailscale');
   if (ctx.windowsServers && updatesEnabled()) execNeeds.push('Windows updates');
   if (execNeeds.length) poolPrivs.push([agentExec, execNeeds.join(', ')]);
+  const backups = backupSettings();
+  if (backups.enabled && backups.storage) {
+    poolPrivs.push(['VM.Backup', 'back up and restore']);
+    // Proxmox checks the restored configuration against these
+    for (const p of ['VM.Config.CPU', 'VM.Config.Memory', 'VM.Config.Disk', 'VM.Config.Network', 'VM.Config.Options',
+      'VM.Config.HWType', 'VM.Config.CDROM', 'VM.Config.Cloudinit']) {
+      if (!poolPrivs.some(([x]) => x === p)) poolPrivs.push([p, 'restore backups']);
+    }
+    reqs.push({ path: `/storage/${backups.storage}`, label: `Backup storage ${backups.storage}`, role: 'PanelBackup',
+      privs: [['Datastore.AllocateSpace', 'store backups'], ['Datastore.Audit', 'list backups']] });
+  }
   reqs.push({ path: pool, label: `Customer pool ${config.pve.pool}`, privs: poolPrivs });
 
   for (const t of ctx.templates) {
@@ -504,6 +517,40 @@ async function checkRemote(c) {
   if (!config.tailscale.enabled) c.add('remote', 'ts:off', 'info', 'Tailscale is off');
 }
 
+async function checkBackups(c) {
+  const s = backupSettings();
+  if (!s.enabled) {
+    c.add('backups', 'bak:off', 'info', 'Backups for customers are off', 'Switch them on under Settings, Backups (needs a backup storage, ideally a Proxmox Backup Server).');
+    return;
+  }
+  const storages = await backupStorages();
+  const st = storages.find((x) => x.id === s.storage);
+  if (!st) {
+    c.add('backups', 'bak:storage', 'error', `The backup storage ${s.storage} isn't available`,
+      'It doesn\'t exist, isn\'t enabled, doesn\'t allow the content "backup", or the token can\'t see it. Customers can\'t make or restore backups.', {
+        text: 'Check the storage in Datacenter, Storage, and give the panel its rights there:',
+        commands: [
+          'pveum role add PanelBackup --privs "Datastore.AllocateSpace Datastore.Audit"',
+          `pveum acl modify /storage/${s.storage} --users ${config.pve.tokenId.split('!')[0]} --roles PanelBackup`,
+        ],
+      });
+    return;
+  }
+  const nodes = [...new Set([...(await clusterGuests()).values()].map((g) => g.node))];
+  const missingOn = nodes.filter((n) => !st.nodes.includes(n));
+  if (missingOn.length) {
+    c.add('backups', 'bak:storage', 'warn', `The backup storage ${s.storage} is missing on ${missingOn.join(', ')}`,
+      'Servers on these nodes can\'t be backed up.', { text: 'Make the storage available on all nodes (Datacenter, Storage, Edit, Nodes).' });
+  } else {
+    c.add('backups', 'bak:storage', 'ok', `Backups go to ${s.storage}${st.type === 'pbs' ? ' (Proxmox Backup Server)' : ''}`,
+      `Up to ${s.maxPerServer} backups per server${s.schedules ? ', automatic backups allowed' : ''}.`);
+  }
+  if (st.type !== 'pbs') {
+    c.add('backups', 'bak:files', 'info', 'Restoring single files needs a Proxmox Backup Server',
+      `${s.storage} is a ${st.type ?? 'non-PBS'} storage: customers can back up and restore whole servers, but not browse files in a backup.`);
+  }
+}
+
 function checkEmail(c) {
   if (emailConfigured()) {
     c.add('email', 'mail:on', 'ok', 'Email is set up', 'Use "Send test email" under Settings to test delivery.');
@@ -668,6 +715,7 @@ async function runOnce({ requestIp = null, automatic = false, log } = {}) {
     await step('network', checkNetworks);
   }
   await step('remote', checkRemote);
+  if (ctx.reachable) await step('backups', checkBackups);
   await step('email', checkEmail);
   await step('security', checkSecurity);
   await step('maintenance', checkMaintenance);

@@ -120,6 +120,7 @@ PVE Panel was built with substantial help from an AI assistant (**Claude by Anth
 - View provisioning progress and actionable failure messages
 - Manage personal VPN devices
 - Connect servers to a personal Tailscale network
+- Back up, restore and download single files from backups (Proxmox Backup Server)
 - Manage their own two-factor authentication and passkeys
 - See which panel version they're using
 
@@ -732,6 +733,35 @@ The customer list shows *Invitation pending* or *Invitation expired* until the u
 
 ---
 
+## 💾 Server backups
+
+Customers back up their servers to a **Proxmox Backup Server** (or any Proxmox backup storage) — and get single files back without restoring the whole server.
+
+```text
+Back up now ─┐                         ┌─ Restore (current state backed up first, re-isolated, started again)
+Daily/weekly ─┴─ queue ─ vzdump ─ PBS ─┤
+                                       └─ Browse files ─ download a file or a folder as .zip
+```
+
+- **Back up now**, **automatic daily/weekly backups** with rotation, **restore**, **delete**
+- **Browse files** in a backup and download them — straight from the browser (needs PBS)
+- limits per server (default and per customer); restores are checked against the customer's plan
+- **privacy:** customers only see backups made since the server became theirs — a reused VM ID never shows someone else's backups
+- your own Proxmox backup jobs are shown as *By your provider* (restorable, not deletable)
+- the panel uses the Proxmox API only; it never holds PBS credentials
+
+Switch it on under **Settings → Backups** after adding the rights:
+
+```bash
+pveum role modify PanelCustomer --append 1 --privs "VM.Backup VM.Config.HWType VM.Config.CDROM"
+pveum role add PanelBackup --privs "Datastore.AllocateSpace Datastore.Audit"
+pveum acl modify /storage/pbs --users panel@pve --roles PanelBackup
+```
+
+Details: [Backups](https://sebastianflint.github.io/pve-panel/docs/features/backups).
+
+---
+
 ## 🪟 Windows updates
 
 Customers install the latest Windows updates from the server page — **Updates** tab:
@@ -1149,6 +1179,7 @@ Only these file names are served, with a strict sandbox policy. Make sure you're
 │   ├── setupcheck.js
 │   ├── appearance.js
 │   ├── winupdate.js
+│   ├── backups.js
 │   ├── oidc.js
 │   ├── vpn.js
 │   ├── agent.js
@@ -1347,7 +1378,6 @@ Details: [Tests and quality](https://sebastianflint.github.io/pve-panel/docs/ref
 Potential future improvements include:
 
 - Cross-node placement
-- Integrated backup management
 - Customer-managed firewall rules
 - Additional lifecycle automation
 - PostgreSQL support for multi-instance deployments
