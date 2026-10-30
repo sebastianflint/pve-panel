@@ -82,7 +82,33 @@ export async function probe(path) {
   }
 }
 
+/**
+ * GET that returns the raw answer (status, headers, body stream) instead of
+ * JSON, e.g. a file from a backup. Errors are thrown like other calls.
+ */
+async function stream(path, params) {
+  const url = new URL(`${config.pve.url}/api2/json${path}`);
+  if (params) {
+    for (const [k, v] of Object.entries(params)) if (v !== undefined && v !== null) url.searchParams.append(k, String(v));
+  }
+  let res;
+  try {
+    res = await fetch(url, { headers: { Authorization: authHeader }, dispatcher });
+  } catch (err) {
+    console.error('Proxmox unreachable:', err.cause?.code || err.cause?.message || err.message);
+    throw new PveError(503, 'The server platform is unreachable right now. Try again in a minute.');
+  }
+  if (!res.ok) {
+    const text = await res.text();
+    let json = null;
+    try { json = JSON.parse(text); } catch { /* not JSON */ }
+    throw new PveError(res.status, (json?.message || res.statusText || 'Proxmox request failed').trim());
+  }
+  return res;
+}
+
 export const pve = {
+  stream,
   get: (path, params) => request('GET', path, params),
   post: (path, params) => request('POST', path, params),
   put: (path, params) => request('PUT', path, params),

@@ -5,6 +5,7 @@ import { config } from './config.js';
 import { pve, clusterGuests, guestPath, waitTask, invalidateGuestCache } from './pve.js';
 import { removeNetwork, guestsUsingVnet } from './network.js';
 import { syncGateway } from './vpn.js';
+import { forgetServerBackups } from './backups.js';
 
 export class CleanupError extends Error {
   constructor(status, message) {
@@ -38,6 +39,7 @@ export async function destroyServer(actor, vmid) {
   db.prepare('DELETE FROM vms WHERE vmid = ?').run(vmid);
   db.prepare('DELETE FROM tasks WHERE vmid = ?').run(vmid);
   invalidateGuestCache();
+  await forgetServerBackups(vmid, guest?.node);
   audit(actor, vmid, 'admin_server_deleted', { name: guest?.name ?? null });
 }
 

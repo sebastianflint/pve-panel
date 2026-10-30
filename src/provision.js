@@ -9,6 +9,7 @@ import { setupWindows, windowsPasswordProblem } from './windows.js';
 import { agentExec } from './agent.js';
 import { expiryForNewServer } from './expiry.js';
 import { activeRun } from './winupdate.js';
+import { forgetServerBackups } from './backups.js';
 
 const MB = 1024 ** 2;
 const GB = 1024 ** 3;
@@ -523,9 +524,10 @@ export async function deleteServer(req, row) {
 
   const actor = { account: { id: req.account.id }, ip: req.ip };
   waitTask(guest.node, upid)
-    .then(() => {
+    .then(async () => {
       db.prepare('DELETE FROM vms WHERE vmid = ?').run(row.vmid);
       audit(actor, row.vmid, 'server_deleted');
+      await forgetServerBackups(row.vmid, guest.node);
     })
     .catch((err) => {
       db.prepare("UPDATE vms SET state = 'failed', error = ? WHERE vmid = ?")

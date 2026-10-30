@@ -941,3 +941,24 @@ dialog p { margin: 0 0 20px; }
 }
 .cmd code { flex: 1; font-family: var(--mono); font-size: 13px; color: var(--ink); overflow-wrap: anywhere; user-select: all; }
 .cmd .cmd-copy { padding: 4px 10px; font-size: 12px; flex: none; }
+
+/* ---- Backups (customer) ----------------------------------------------------------- */
+.backups { max-width: 900px; }
+.backups-head { margin-top: 0; align-items: flex-start; }
+.backups-head p { margin: 4px 0 0; }
+.backup-progress { margin: 0 0 18px; }
+.backup-progress p { margin: 0; }
+.backup-progress p + p { margin-top: 6px; }
+.backup-list .tag { margin-left: 6px; vertical-align: 1px; }
+.schedule-form { display: grid; gap: 10px; padding: 18px; border: 1px solid var(--line); border-radius: var(--r-lg); background: var(--surface); }
+.schedule-form .small-head { margin: 0; }
+.schedule-form p { margin: 0; }
+.schedule-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; align-items: end; }
+.schedule-grid [hidden] { display: none; }
+.file-crumbs { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-top: 6px; font-size: 14px; }
+.file-list li { gap: 10px; }
+.file-icon { color: var(--muted); display: inline-flex; }
+.file-name { font-weight: 600; overflow-wrap: anywhere; }
+.file-list .btn { padding: 7px 10px; font-size: 13px; }
+.schedule-grid :is(select, input, .btn) { height: 46px; box-sizing: border-box; }
+.file-list a.btn, .backup-list a.btn { text-decoration: none; }

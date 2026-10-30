@@ -54,6 +54,17 @@ const ACTION_LABELS = {
   admin_expiry_rule: 'Changed customer expiry rule',
   admin_expiry_settings: 'Changed expiry settings',
   admin_expiry_run: 'Ran expiry check',
+  admin_backup_settings: 'Changed backup settings',
+  admin_backup_limit: 'Changed backup limit',
+  backup_create: 'Started a backup',
+  backup_created: 'Backup made',
+  backup_failed: 'Backup failed',
+  backup_delete: 'Deleted a backup',
+  backup_restore_started: 'Started a restore',
+  backup_restored: 'Restored a backup',
+  backup_restore_failed: 'Restore failed',
+  backup_schedule: 'Changed automatic backups',
+  backup_file_download: 'Downloaded a file from a backup',
   admin_setup_check: 'Ran the setup check',
   admin_setup_check_settings: 'Changed setup check alerts',
   admin_appearance: 'Changed the color scheme',
@@ -117,9 +128,9 @@ export function createAdmin({ root, api, toast, fail, confirmAction, promptText,
         [st.users, st.email] = await Promise.all([api('/api/admin/users'), api('/api/admin/settings/email')]);
         if (!quiet) setTimeout(watchDeletions);
       } else if (st.tab === 'settings') {
-        [st.email, st.expiry, st.appearance, st.winupdates] = await Promise.all([
+        [st.email, st.expiry, st.appearance, st.winupdates, st.backups] = await Promise.all([
           api('/api/admin/settings/email'), api('/api/admin/settings/expiry'), api('/api/admin/settings/appearance'),
-          api('/api/admin/settings/winupdates'),
+          api('/api/admin/settings/winupdates'), api('/api/admin/settings/backups'),
         ]);
       } else if (st.tab === 'setup') {
         st.setup = await api('/api/admin/setup-check');
@@ -628,6 +639,7 @@ export function createAdmin({ root, api, toast, fail, confirmAction, promptText,
     form.maxCores.value = fresh ? 4 : user.maxCores;
     form.maxMemoryGb.value = fresh ? 8 : +(user.maxMemoryMb / 1024).toFixed(1);
     form.maxDiskGb.value = fresh ? 100 : user.maxDiskGb;
+    form.maxBackups.value = user.maxBackups ?? '';
     const u = user.usage;
     document.getElementById('limits-usage').textContent = u
       ? `In use now: ${u.servers} servers, ${u.cores} cores, ${gb(u.memoryMb)} memory, ${u.diskGb} GB disk.`
@@ -651,6 +663,7 @@ export function createAdmin({ root, api, toast, fail, confirmAction, promptText,
               ...(form.expiryMode.value === 'after_creation' ? { expiryDays: Number(form.expiryDays.value) } : {}),
               ...(form.expiryMode.value === 'fixed_date' ? { expiryDate: form.expiryDate.value } : {}),
               expirySelfExtend: form.expirySelfExtend.checked,
+              maxBackups: form.maxBackups.value === '' ? null : Number(form.maxBackups.value),
             },
           });
           toast(`Limits and expiry saved for ${user.email}`);
@@ -964,6 +977,40 @@ export function createAdmin({ root, api, toast, fail, confirmAction, promptText,
 
         <section class="security-card settings-card">
           <div class="settings-head">
+            <h2 class="twofa-title">Backups</h2>
+            <p class="muted">Customers back up their servers, restore them and — with a Proxmox Backup Server — download
+              single files from a backup (Backups tab on the server page). Backups go to the storage chosen here; the
+              panel uses the Proxmox API, so it never needs the backup server's credentials. Backups of your own Proxmox
+              backup jobs are shown to the customer too (from the day the server became theirs), but can't be deleted by them.</p>
+          </div>
+          <form id="backup-settings" class="email-form" novalidate>
+            <label class="check"><input type="checkbox" name="enabled" ${st.backups.settings.enabled ? 'checked' : ''}>
+              <span>Allow customers to make and restore backups</span></label>
+            <div class="grid-3">
+              <label>Backup storage
+                <select name="storage">
+                  <option value="">Choose…</option>
+                  ${st.backups.storages.map((x) => `<option value="${esc(x.id)}" ${x.id === st.backups.settings.storage ? 'selected' : ''}>${esc(x.id)}${x.type === 'pbs' ? ' (Proxmox Backup Server)' : x.type ? ` (${esc(x.type)})` : ''}</option>`).join('')}
+                  ${st.backups.settings.storage && !st.backups.storages.some((x) => x.id === st.backups.settings.storage)
+                    ? `<option value="${esc(st.backups.settings.storage)}" selected>${esc(st.backups.settings.storage)} (not found)</option>` : ''}
+                </select>
+                <span class="hint">Storages with the content “backup”. Browsing files needs a Proxmox Backup Server.</span>
+              </label>
+              <label>Backups per server
+                <input name="maxPerServer" type="number" min="1" max="100" value="${esc(st.backups.settings.maxPerServer)}" required>
+                <span class="hint">Made by the customer or automatically. Per customer: <em>Limits</em>.</span>
+              </label>
+            </div>
+            <label class="check"><input type="checkbox" name="schedules" ${st.backups.settings.schedules ? 'checked' : ''}>
+              <span>Automatic backups <span class="muted">Customers can back up daily or weekly; older automatic backups are rotated out.</span></span></label>
+            <label class="check"><input type="checkbox" name="keepAfterDelete" ${st.backups.settings.keepAfterDelete ? 'checked' : ''}>
+              <span>Keep backups of deleted servers <span class="muted">Otherwise the panel's backups of a server are deleted together with it.</span></span></label>
+            <div class="row"><button class="btn primary">Save</button></div>
+          </form>
+        </section>
+
+        <section class="security-card settings-card">
+          <div class="settings-head">
             <h2 class="twofa-title">Server expiry</h2>
             <p class="muted">For customers or servers you give an expiry date (customer: <em>Limits</em>; server: the
               clock button in <em>Servers</em>). Reminders by email, stopped at expiry, deleted after the grace period —
@@ -1050,6 +1097,23 @@ export function createAdmin({ root, api, toast, fail, confirmAction, promptText,
         toast('Email settings saved');
         renderSettings();
       } catch (err) { fail(err); }
+    }
+    if (ev.target.id === 'backup-settings') {
+      ev.preventDefault();
+      const f = ev.target;
+      if (!f.reportValidity()) return;
+      try {
+        st.backups.settings = await api('/api/admin/settings/backups', {
+          method: 'PUT',
+          body: {
+            enabled: f.enabled.checked, storage: f.storage.value, maxPerServer: Number(f.maxPerServer.value),
+            schedules: f.schedules.checked, keepAfterDelete: f.keepAfterDelete.checked,
+          },
+        });
+        toast(st.backups.settings.enabled ? 'Backups are on for customers' : 'Backup settings saved');
+        renderSettings();
+      } catch (err) { fail(err); }
+      return;
     }
     if (ev.target.id === 'expiry-settings') {
       ev.preventDefault();

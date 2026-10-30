@@ -87,6 +87,26 @@
       </div>
     </form>
   </dialog>
+  <dialog id="restore-dialog">
+    <form method="dialog" class="limits-form">
+      <h2 class="h2" id="rs-title">Restore this backup?</h2>
+      <p id="rs-text"></p>
+      <label class="check" id="rs-first-wrap">
+        <input type="checkbox" name="backupFirst" checked>
+        <span>Back up the current state first
+          <span class="muted" id="rs-first-hint">So you can go back if the restore isn't what you wanted.</span>
+        </span>
+      </label>
+      <label class="check">
+        <input type="checkbox" name="start">
+        <span>Start the server afterwards</span>
+      </label>
+      <div class="row end">
+        <button value="cancel" class="btn ghost" formnovalidate>Cancel</button>
+        <button value="ok" class="btn danger">Restore</button>
+      </div>
+    </form>
+  </dialog>
   <dialog id="prompt">
     <form method="dialog">
       <label>

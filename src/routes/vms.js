@@ -1,3 +1,4 @@
+import { Readable } from 'node:stream';
 import { db, audit } from '../db.js';
 import { config } from '../config.js';
 import {
@@ -12,6 +13,9 @@ import { tailscaleStatus, connectTailscale, disconnectTailscale } from '../tails
 import { versionInfo } from '../version.js';
 import { expiryInfo, expirySettings, customerExtend } from '../expiry.js';
 import { updateInfo, startUpdates, refreshForServer } from '../winupdate.js';
+import {
+  backupInfo, backupsAvailableFor, startBackup, startRestore, deleteBackup, setSchedule, listFiles, downloadFile,
+} from '../backups.js';
 
 const ownedByUser = db.prepare('SELECT * FROM vms WHERE vmid = ? AND user_id = ?');
 const listForUser = db.prepare('SELECT * FROM vms WHERE user_id = ? ORDER BY vmid');
@@ -161,7 +165,8 @@ export default async function vmRoutes(app) {
     const tailscale = config.tailscale.enabled;
     // Version number only; commit, build date and update status stay admin-only.
     const panelVersion = config.showVersionToCustomers ? versionInfo.version : null;
-    if (!a.can_create) return { canCreate: false, network, vpn, tailscale, panelVersion };
+    const backups = backupsAvailableFor(a.id);
+    if (!a.can_create) return { canCreate: false, network, vpn, tailscale, panelVersion, backups };
     return {
       canCreate: true,
       limits: limitsOf(a),
@@ -171,6 +176,7 @@ export default async function vmRoutes(app) {
       vpn,
       tailscale,
       panelVersion,
+      backups,
     };
   });
 
@@ -303,6 +309,92 @@ export default async function vmRoutes(app) {
     }
     const result = await deleteServer(req, row);
     return reply.code(202).send(result);
+  });
+
+  // ---- Backups (Proxmox Backup Server) ----------------------------------------
+  const VOLID = { type: 'string', minLength: 3, maxLength: 300, pattern: '^[A-Za-z0-9][\\w.-]*:[\\w./:+-]+$' };
+  const FILEPATH = { type: 'string', maxLength: 8192, pattern: '^[A-Za-z0-9+/=]*$' };
+
+  app.get('/api/vms/:vmid/backups', async (req) => {
+    const { row, guest } = await ownedGuest(req);
+    return backupInfo(row, guest);
+  });
+
+  app.post('/api/vms/:vmid/backups', { config: { rateLimit: { max: 10, timeWindow: '1 hour' } } }, async (req, reply) => {
+    const { row, guest } = await ownedGuest(req);
+    return reply.code(202).send(await startBackup(req, row, guest));
+  });
+
+  app.delete('/api/vms/:vmid/backups', {
+    config: { rateLimit: { max: 30, timeWindow: '10 minutes' } },
+    schema: { querystring: { type: 'object', required: ['id'], properties: { id: VOLID } } },
+  }, async (req, reply) => {
+    const { row, guest } = await ownedGuest(req);
+    await deleteBackup(req, row, guest, req.query.id);
+    return reply.code(204).send();
+  });
+
+  app.post('/api/vms/:vmid/backups/restore', {
+    config: { rateLimit: { max: 5, timeWindow: '1 hour' } },
+    schema: {
+      body: {
+        type: 'object', required: ['id'], additionalProperties: false,
+        properties: { id: VOLID, backupFirst: { type: 'boolean' }, start: { type: 'boolean' } },
+      },
+    },
+  }, async (req, reply) => {
+    const { row, guest } = await ownedGuest(req);
+    return reply.code(202).send(await startRestore(req, row, guest, { volid: req.body.id, backupFirst: req.body.backupFirst, start: req.body.start }));
+  });
+
+  app.put('/api/vms/:vmid/backups/schedule', {
+    schema: {
+      body: {
+        type: 'object', required: ['frequency'], additionalProperties: false,
+        properties: {
+          frequency: { type: 'string', enum: ['off', 'daily', 'weekly'] },
+          weekday: { type: 'integer', minimum: 0, maximum: 6 },
+          hour: { type: 'integer', minimum: 0, maximum: 23 },
+          minute: { type: 'integer', minimum: 0, maximum: 59 },
+          keep: { type: 'integer', minimum: 1, maximum: 100 },
+        },
+        if: { properties: { frequency: { enum: ['daily', 'weekly'] } } },
+        then: { required: ['hour', 'minute', 'keep'] },
+      },
+    },
+  }, async (req) => {
+    const { row } = await ownedGuest(req);
+    return { schedule: setSchedule(req, row, req.body) };
+  });
+
+  // Files inside a backup (PBS file restore)
+  app.get('/api/vms/:vmid/backups/files', {
+    config: { rateLimit: { max: 60, timeWindow: '1 minute' } },
+    schema: { querystring: { type: 'object', required: ['id'], properties: { id: VOLID, path: FILEPATH } } },
+  }, async (req) => {
+    const { row, guest } = await ownedGuest(req);
+    return listFiles(row, guest, req.query.id, req.query.path);
+  });
+
+  app.get('/api/vms/:vmid/backups/download', {
+    config: { rateLimit: { max: 30, timeWindow: '1 minute' } },
+    schema: {
+      querystring: {
+        type: 'object', required: ['id', 'path'],
+        properties: { id: VOLID, path: { ...FILEPATH, minLength: 1 }, folder: { type: 'string', enum: ['0', '1'] } },
+      },
+    },
+  }, async (req, reply) => {
+    const { row, guest } = await ownedGuest(req);
+    const isFolder = req.query.folder === '1';
+    const { res, filename } = await downloadFile(row, guest, req.query.id, req.query.path, isFolder);
+    audit(req, row.vmid, 'backup_file_download', { backup: req.query.id, file: Buffer.from(req.query.path, 'base64').toString('utf8').slice(0, 300) });
+    reply.header('Content-Type', isFolder ? 'application/zip' : 'application/octet-stream');
+    reply.header('Content-Disposition', `attachment; filename="${filename.replace(/"/g, '')}"; filename*=UTF-8''${encodeURIComponent(filename)}`);
+    reply.header('Cache-Control', 'no-store');
+    const length = res.headers.get('content-length');
+    if (length) reply.header('Content-Length', length);
+    return reply.send(Readable.fromWeb(res.body));
   });
 
   // ---- Tailscale (the customer's own tailnet) --------------------------------
