@@ -1,5 +1,5 @@
 ---
-title: Linux and Windows templates
+title: Templates and container images
 sidebar_position: 1
 ---
 
@@ -80,3 +80,50 @@ the disk after cloning. Servers are full clones on the template's node.
 
 For TLS, either give Proxmox a trusted certificate or copy `/etc/pve/pve-root-ca.pem`
 to the panel host and set `PVE_CA_FILE`. Avoid `PVE_VERIFY_TLS=false` outside development.
+
+## Container images (LXC)
+
+Besides VM templates, customers can create **containers** from the container images
+Proxmox downloads (the *CT Templates* of a storage, e.g. Debian, Ubuntu, Alpine).
+Nothing has to be prepared: the panel builds each container straight from the image file.
+
+![Creating a container](/container-create.png)
+
+**Offer an image**
+
+1. In Proxmox, download an image: *node → local → CT Templates → Templates*
+   (e.g. `debian-13-standard`). It appears in the panel's **Templates** tab under
+   *Container images (LXC)*, with the node and storage it is on.
+2. Tick **Offered**, give it a name customers recognise, choose the **Disk storage**
+   (a storage with the content *Container*, e.g. `local-lvm`) and the minimum disk
+   size, and **Save**.
+
+Customers now see it in *New server*, marked **Container**.
+
+**What customers get**
+
+| | |
+|---|---|
+| Type | an **unprivileged** container (root inside is not root on the host); the panel never creates privileged containers |
+| Sign-in | `root` with the password and/or SSH keys entered in the form |
+| Network | the customer's private network, isolated like a VM (firewall, IP and MAC filter). With customer networks off: the bridge set per image (default `vmbr0`) |
+| Size | CPU cores, memory (plus up to 512 MB swap) and disk from the form, counted against the plan like a VM |
+| Nesting | on by default: systemd in current distributions (Debian 12+, Ubuntu 24.04+) needs it. For unprivileged containers the panel's `VM.Allocate` right is enough |
+
+Resize, reinstall (with a container image; the MAC address and so usually the IP
+address stay), snapshots, the browser console, backups and restores work like for VMs.
+Changes to CPU and memory apply to a running container right away.
+
+**Not for containers:** Windows, own kernel modules, Tailscale and Windows updates
+through the panel (both need the QEMU guest agent; customers can install Tailscale in
+a container themselves if you allow `/dev/net/tun`), and a snapshot with RAM.
+
+**Images on a node's local storage** exist only on that node, so containers from them
+are created there. Images on shared storage (NFS, CephFS) can be used on every node.
+
+**Rights:** besides the rights for creating servers, the panel needs `Datastore.Audit`
+on the storage the image is on (e.g. `/storage/local`) and `Datastore.AllocateSpace`
+on the disk storage — see [Prepare Proxmox VE](../installation/proxmox). The
+[Setup check](../administration/setup-check) shows a missing right, and an offered
+image whose file was deleted in Proxmox.
+

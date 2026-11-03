@@ -188,7 +188,8 @@ export async function waitTask(node, upid, timeoutMs = 30 * 60_000) {
 /** Finds the key of the boot disk in a VM config, e.g. "scsi0". */
 export function bootDiskKey(cfg) {
   const order = /order=([^,\s]+)/.exec(cfg.boot ?? '')?.[1]?.split(';') ?? [];
-  const candidates = [...order, cfg.bootdisk, 'scsi0', 'virtio0', 'sata0', 'ide0'].filter(Boolean);
+  // containers: rootfs
+  const candidates = [...order, cfg.bootdisk, 'scsi0', 'virtio0', 'sata0', 'ide0', 'rootfs'].filter(Boolean);
   for (const key of candidates) {
     const value = cfg[key];
     if (typeof value === 'string' && !value.includes('media=cdrom') && !value.includes('cloudinit')) {

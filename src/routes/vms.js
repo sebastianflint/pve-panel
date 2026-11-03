@@ -11,6 +11,7 @@ import { networkOf } from '../network.js';
 import { vpnInfoFor } from '../vpn.js';
 import { tailscaleStatus, connectTailscale, disconnectTailscale } from '../tailscale.js';
 import { versionInfo } from '../version.js';
+import { containerIps } from '../containers.js';
 import { expiryInfo, expirySettings, customerExtend } from '../expiry.js';
 import { updateInfo, startUpdates, refreshForServer } from '../winupdate.js';
 import {
@@ -30,6 +31,8 @@ const POWER_ACTIONS = {
 };
 const TIMEFRAMES = ['hour', 'day', 'week', 'month'];
 const SNAPSHOT_NAME = /^[A-Za-z][A-Za-z0-9_-]{1,39}$/;
+// A VM template (its VMID) or a container image ("ct-<id>")
+const TEMPLATE_ID = { anyOf: [{ type: 'integer', minimum: 100 }, { type: 'string', pattern: '^ct-[0-9]{1,9}$' }] };
 
 function notFound() {
   const err = new Error('Server not found');
@@ -194,7 +197,7 @@ export default async function vmRoutes(app) {
         additionalProperties: false,
         properties: {
           hostname: { type: 'string', pattern: '^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$' },
-          templateId: { type: 'integer', minimum: 100 },
+          templateId: TEMPLATE_ID,
           cores: { type: 'integer', minimum: 1, maximum: 128 },
           memoryMb: { type: 'integer', minimum: 512, maximum: 1048576 },
           diskGb: { type: 'integer', minimum: 1, maximum: 65536 },
@@ -220,7 +223,7 @@ export default async function vmRoutes(app) {
         required: ['templateId'],
         additionalProperties: false,
         properties: {
-          templateId: { type: 'integer', minimum: 100 },
+          templateId: TEMPLATE_ID,
           username: { type: 'string', pattern: '^[a-z_][a-z0-9_-]{0,31}$' },
           password: { type: 'string', minLength: 12, maxLength: 200 },
           sshKeys: { type: 'string', maxLength: 16000 },
@@ -430,9 +433,9 @@ export default async function vmRoutes(app) {
     ]);
     if (cfg.ostype && cfg.ostype !== row.ostype) saveOstype.run(cfg.ostype, row.vmid);
 
-    const ips = guest.type === 'qemu' && status.status === 'running' && status.agent
-      ? await guestIps(path)
-      : null;
+    const ips = status.status !== 'running' ? null
+      : guest.type === 'lxc' ? await containerIps(path)
+        : status.agent ? await guestIps(path) : null;
 
     // CPU/memory changes that wait for a restart by Proxmox
     let pendingSize = null;

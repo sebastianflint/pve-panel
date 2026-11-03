@@ -10,6 +10,7 @@ import { agentExec } from './agent.js';
 import { expiryForNewServer } from './expiry.js';
 import { activeRun } from './winupdate.js';
 import { forgetServerBackups } from './backups.js';
+import { offeredContainerTemplates, containerRow, containerParams, containerMac } from './containers.js';
 
 const MB = 1024 ** 2;
 const GB = 1024 ** 3;
@@ -25,11 +26,11 @@ export function limitsOf(account) {
   };
 }
 
-/** Total size of a VM's disks in GB (CD drives and cloud-init drives excluded). */
+/** Total size of a server's disks in GB (VM disks, or a container's rootfs and mount points; CD and cloud-init drives excluded). */
 export function diskTotalGb(cfg) {
   let total = 0;
   for (const [k, v] of Object.entries(cfg)) {
-    if (!/^(scsi|virtio|sata|ide)\d+$/.test(k)) continue;
+    if (!/^((scsi|virtio|sata|ide)\d+|rootfs|mp\d+)$/.test(k)) continue;
     if (/media=cdrom|cloudinit/.test(String(v))) continue;
     total += diskSizeGb(v) || 0;
   }
@@ -88,6 +89,7 @@ export async function offeredTemplates() {
       return {
         id: t.vmid,
         name: t.label,
+        kind: 'vm',
         setup: windows ? 'windows' : 'cloudinit',
         minDiskGb: Math.ceil(diskSizeGb(cfg[disk])) || 1,
         defaultUser: windows ? (t.ci_user || 'Administrator') : (t.ci_user || cfg.ciuser || ''),
@@ -97,7 +99,7 @@ export async function offeredTemplates() {
       return null;
     }
   }));
-  return result.filter(Boolean);
+  return [...result.filter(Boolean), ...await offeredContainerTemplates()];
 }
 
 // ---- Create -----------------------------------------------------------------
@@ -122,6 +124,12 @@ function applySetupRules(spec, offered) {
     spec.sshKeys = undefined;
     const problem = windowsPasswordProblem(spec.password, spec.username);
     if (problem) throw new ProvisionError(400, problem);
+  } else if (offered.setup === 'container') {
+    // Containers have no cloud-init: sign-in is root, with a password and/or SSH keys
+    spec.username = 'root';
+    if (!spec.password && !spec.sshKeys?.trim()) {
+      throw new ProvisionError(400, 'Set a password or add an SSH key so you can sign in to the container');
+    }
   } else {
     if (!spec.username) throw new ProvisionError(400, 'Choose a user name');
     if (!spec.password && !spec.sshKeys?.trim()) {
@@ -146,9 +154,11 @@ export async function createServer(req, spec) {
 
   let background = false;
   try {
-    const tplRow = db.prepare('SELECT * FROM templates WHERE vmid = ?').get(spec.templateId);
-    if (!tplRow) throw new ProvisionError(400, 'That image is not available');
-    const tpl = await locateTemplate(spec.templateId);
+    const isContainer = typeof spec.templateId === 'string';
+    const ctRow = isContainer ? containerRow(spec.templateId) : null;
+    const tplRow = isContainer ? null : db.prepare('SELECT * FROM templates WHERE vmid = ?').get(spec.templateId);
+    if (!tplRow && !ctRow) throw new ProvisionError(400, 'That image is not available');
+    const tpl = isContainer ? null : await locateTemplate(spec.templateId);
     const offered = (await offeredTemplates()).find((t) => t.id === spec.templateId);
     if (!offered) throw new ProvisionError(400, 'That image is not available');
     if (spec.diskGb < offered.minDiskGb) {
@@ -188,28 +198,33 @@ export async function createServer(req, spec) {
           // taken in Proxmox, try the next one
         }
       }
-      const task = await pve.post(`/nodes/${encodeURIComponent(tpl.node)}/qemu/${tpl.vmid}/clone`, {
-        newid: id,
-        name: spec.hostname,
-        full: 1,
-        storage: tplRow.storage || undefined,
-        pool: config.pve.pool,
-      });
+      const task = isContainer
+        ? await pve.post(`/nodes/${encodeURIComponent(ctRow.node)}/lxc`, containerParams({ vmid: id, row: ctRow, spec, net, pool: config.pve.pool }))
+        : await pve.post(`/nodes/${encodeURIComponent(tpl.node)}/qemu/${tpl.vmid}/clone`, {
+          newid: id,
+          name: spec.hostname,
+          full: 1,
+          storage: tplRow.storage || undefined,
+          pool: config.pve.pool,
+        });
       return { vmid: id, upid: task };
     });
 
+    const templateRef = isContainer ? spec.templateId : tpl.vmid;
     db.prepare(`
       INSERT INTO vms (vmid, user_id, type, label, state, created_by_customer, spec, progress, expires_at, expiry_set_at)
-      VALUES (?, ?, 'qemu', NULL, 'creating', 1, ?, 'Copying the image', ?, ?)
-    `).run(vmid, account.id, JSON.stringify({
-      cores: spec.cores, memoryMb: spec.memoryMb, diskGb: spec.diskGb, template: tpl.vmid,
+      VALUES (?, ?, ?, NULL, 'creating', 1, ?, ?, ?, ?)
+    `).run(vmid, account.id, isContainer ? 'lxc' : 'qemu', JSON.stringify({
+      cores: spec.cores, memoryMb: spec.memoryMb, diskGb: spec.diskGb, template: templateRef,
       hostname: spec.hostname,
-    }), expiryForNewServer(account.id), new Date().toISOString());
-    audit(req, vmid, 'server_create_started', { template: tpl.vmid, hostname: spec.hostname });
+    }), isContainer ? 'Creating the container' : 'Copying the image', expiryForNewServer(account.id), new Date().toISOString());
+    audit(req, vmid, 'server_create_started', { template: templateRef, hostname: spec.hostname });
 
     background = true;
     const actor = { account: { id: account.id }, ip: req.ip };
-    finishCreate(actor, tpl.node, vmid, upid, spec, tplRow, net)
+    (isContainer
+      ? finishContainer(actor, ctRow.node, vmid, upid, net)
+      : finishCreate(actor, tpl.node, vmid, upid, spec, tplRow, net))
       .finally(() => creatingFor.delete(account.id));
 
     return vmid;
@@ -281,6 +296,29 @@ async function finishCreate(actor, node, vmid, cloneUpid, spec, tplRow, net, {
   }
 }
 
+/** After Proxmox created a container: isolate it in the customer's network and start it. */
+async function finishContainer(actor, node, vmid, createUpid, net, { done = 'server_created', failed = 'server_create_failed' } = {}) {
+  const path = `/nodes/${encodeURIComponent(node)}/lxc/${vmid}`;
+  const progress = (text) => setProgress.run(text, vmid);
+  try {
+    await waitTask(node, createUpid);
+    if (net) {
+      progress('Securing the network');
+      await isolateGuest(path, net);
+    }
+    progress('Starting');
+    await waitTask(node, await pve.post(`${path}/status/start`));
+    db.prepare("UPDATE vms SET state = 'ready', error = NULL, progress = NULL WHERE vmid = ?").run(vmid);
+    audit(actor, vmid, done);
+  } catch (err) {
+    db.prepare("UPDATE vms SET state = 'failed', error = ?, progress = NULL WHERE vmid = ?")
+      .run(String(err.message).slice(0, 500), vmid);
+    audit(actor, vmid, failed, { error: err.message });
+  } finally {
+    invalidateGuestCache();
+  }
+}
+
 // ---- Reinstall --------------------------------------------------------------
 
 /**
@@ -314,7 +352,9 @@ export async function reinstallServer(req, row, input) {
     const guest = (await clusterGuests(true)).get(vmid) ?? null; // may be gone after a failed attempt
     const oldCfg = guest ? await pve.get(`${guestPath(guest)}/config`) : {};
     const oldDisk = bootDiskKey(oldCfg);
-    const mac = /=([0-9A-Fa-f]{2}(?::[0-9A-Fa-f]{2}){5})/.exec(oldCfg.net0 ?? '')?.[1] ?? old.mac ?? null;
+    const isContainer = row.type === 'lxc';
+    const mac = (isContainer ? containerMac(oldCfg.net0) : /=([0-9A-Fa-f]{2}(?::[0-9A-Fa-f]{2}){5})/.exec(oldCfg.net0 ?? '')?.[1])
+      ?? old.mac ?? null;
 
     // Same size as before
     const spec = {
@@ -325,27 +365,33 @@ export async function reinstallServer(req, row, input) {
       diskGb: old.diskGb ?? (oldDisk ? Math.ceil(diskSizeGb(oldCfg[oldDisk])) : 0),
     };
 
-    const tplRow = db.prepare('SELECT * FROM templates WHERE vmid = ?').get(spec.templateId);
+    // A container is reinstalled from a container image, a VM from a VM template
+    if (isContainer !== (typeof spec.templateId === 'string')) {
+      throw new ProvisionError(400, isContainer ? 'Choose a container image for this container' : 'Choose a server image for this server');
+    }
+    const ctRow = isContainer ? containerRow(spec.templateId) : null;
+    const tplRow = isContainer ? null : db.prepare('SELECT * FROM templates WHERE vmid = ?').get(spec.templateId);
     const offered = (await offeredTemplates()).find((t) => t.id === spec.templateId);
-    if (!tplRow || !offered) throw new ProvisionError(400, 'That image is not available');
+    if (!(tplRow || ctRow) || !offered) throw new ProvisionError(400, 'That image is not available');
     if (spec.diskGb < offered.minDiskGb) {
       throw new ProvisionError(400, `This image needs a disk of at least ${offered.minDiskGb} GB; this server has ${spec.diskGb} GB`);
     }
     applySetupRules(spec, offered);
-    const tpl = await locateTemplate(spec.templateId);
+    const tpl = isContainer ? null : await locateTemplate(spec.templateId);
+    const templateRef = isContainer ? spec.templateId : tpl.vmid;
     const net = config.network.enabled ? await ensureNetwork(account.id) : null;
 
     // The row keeps the ID reserved: new creations skip IDs the panel knows.
     db.prepare(`
       UPDATE vms SET state = 'creating', error = NULL, progress = 'Removing the old installation', spec = ?, ostype = NULL
       WHERE vmid = ?`).run(JSON.stringify({
-      cores: spec.cores, memoryMb: spec.memoryMb, diskGb: spec.diskGb, template: tpl.vmid,
+      cores: spec.cores, memoryMb: spec.memoryMb, diskGb: spec.diskGb, template: templateRef,
       hostname: spec.hostname, mac, reinstalledAt: new Date().toISOString(),
     }), vmid);
     // Things that belonged to the old installation
     db.prepare('DELETE FROM tasks WHERE vmid = ?').run(vmid);
     db.prepare('DELETE FROM tailscale WHERE vmid = ?').run(vmid);
-    audit(req, vmid, 'server_reinstall_started', { template: tpl.vmid, previousTemplate: old.template ?? null });
+    audit(req, vmid, 'server_reinstall_started', { template: templateRef, previousTemplate: old.template ?? null });
 
     background = true;
     const actor = { account: { id: account.id }, ip: req.ip };
@@ -356,6 +402,13 @@ export async function reinstallServer(req, row, input) {
           if (guest.status !== 'stopped') await waitTask(guest.node, await pve.post(`${path}/status/stop`));
           await waitTask(guest.node, await pve.del(path, { purge: 1, 'destroy-unreferenced-disks': 1 }));
           invalidateGuestCache();
+        }
+        if (isContainer) {
+          setProgress.run('Creating the container', vmid);
+          const upid = await serial(() => pve.post(`/nodes/${encodeURIComponent(ctRow.node)}/lxc`,
+            containerParams({ vmid, row: ctRow, spec, net, pool: config.pve.pool, mac })));
+          await finishContainer(actor, ctRow.node, vmid, upid, net, { done: 'server_reinstalled', failed: 'server_reinstall_failed' });
+          return;
         }
         setProgress.run('Copying the image', vmid);
         const upid = await serial(() => pve.post(`/nodes/${encodeURIComponent(tpl.node)}/qemu/${tpl.vmid}/clone`, {
@@ -447,8 +500,11 @@ export async function resizeServer(req, row, { cores, memoryMb, diskGb, restart 
     if (over.length) throw new ProvisionError(409, `This exceeds your plan: ${over.join(', ')}`);
 
     const running = guest.status === 'running';
+    const container = guest.type === 'lxc'; // containers take new CPU/memory limits right away
     if (cpuMemChanged) {
-      await pve.put(`${path}/config`, { cores: next.cores, sockets: 1, memory: next.memoryMb });
+      await pve.put(`${path}/config`, container
+        ? { cores: next.cores, memory: next.memoryMb }
+        : { cores: next.cores, sockets: 1, memory: next.memoryMb });
     }
     if (diskChanged) {
       try {
@@ -483,7 +539,7 @@ export async function resizeServer(req, row, { cores, memoryMb, diskGb, restart 
     }
 
     let restartTask = null;
-    if (cpuMemChanged && running && restart) {
+    if (cpuMemChanged && running && restart && !container) {
       restartTask = await pve.post(`${path}/status/reboot`); // a Proxmox restart applies pending changes
       invalidateGuestCache();
     }
@@ -491,7 +547,7 @@ export async function resizeServer(req, row, { cores, memoryMb, diskGb, restart 
     return {
       before: cur,
       after: next,
-      pendingRestart: cpuMemChanged && running && !restartTask,
+      pendingRestart: cpuMemChanged && running && !restartTask && !container,
       restartTask: typeof restartTask === 'string' ? restartTask : null,
       windowsDisk,
     };
@@ -517,7 +573,7 @@ export async function deleteServer(req, row) {
     throw new ProvisionError(409, 'Shut down the server before deleting it');
   }
 
-  const path = `/nodes/${encodeURIComponent(guest.node)}/qemu/${row.vmid}`;
+  const path = guestPath(guest); // VM or container
   const upid = await pve.del(path, { purge: 1, 'destroy-unreferenced-disks': 1 });
   db.prepare("UPDATE vms SET state = 'deleting' WHERE vmid = ?").run(row.vmid);
   audit(req, row.vmid, 'server_delete_started');

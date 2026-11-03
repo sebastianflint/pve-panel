@@ -20,6 +20,7 @@ import {
 import { sendInvitation, unusablePassword, inviteState } from '../invite.js';
 import { usageOf } from '../provision.js';
 import { backupSettings, saveBackupSettings, backupStorages } from '../backups.js';
+import { containerImages, containerStorages, forgetImageCache } from '../containers.js';
 import { networkOf, allNetworks } from '../network.js';
 import { adminOverview, removeDevice, syncGateway } from '../vpn.js';
 import { config } from '../config.js';
@@ -532,7 +533,67 @@ export default async function adminRoutes(app) {
         setup: row?.setup ?? (/^win/.test(g.name ?? '') ? 'windows' : 'cloudinit'),
       };
     }).sort((a, b) => a.vmid - b.vmid);
-    return { templates: list, storages };
+    // Container images (CT templates): every image file, and whether it is offered
+    const offeredCt = db.prepare('SELECT * FROM ct_templates').all();
+    const [images, ctStorages] = await Promise.all([containerImages({ force: true }), containerStorages()]);
+    const containers = images.map((i) => {
+      const row = offeredCt.find((r) => r.volid === i.volid && (i.shared || r.node === i.node));
+      return {
+        volid: i.volid, node: i.node, file: i.file, size: i.size, shared: i.shared,
+        offered: !!row, id: row?.id ?? null, label: row?.label ?? '', storage: row?.storage ?? '',
+        minDiskGb: row?.min_disk_gb ?? 4, bridge: row?.bridge ?? 'vmbr0', nesting: row ? !!row.nesting : true,
+      };
+    });
+    // offered images whose file is gone (deleted in Proxmox)
+    const missing = offeredCt.filter((r) => !containers.some((c) => c.id === r.id))
+      .map((r) => ({ volid: r.volid, node: r.node, id: r.id, label: r.label, missing: true }));
+    return {
+      templates: list, storages,
+      containers, missingContainers: missing, containerStorages: ctStorages, networksEnabled: config.network.enabled,
+    };
+  });
+
+  // ---- Container images (LXC) offered to customers ------------------------------
+  app.put('/api/admin/ct-templates', {
+    schema: {
+      body: {
+        type: 'object', additionalProperties: false,
+        required: ['volid', 'node', 'label', 'storage'],
+        properties: {
+          volid: { type: 'string', maxLength: 300, pattern: '^[A-Za-z0-9][\\w.-]*:vztmpl/[\\w.+-]+$' },
+          node: { type: 'string', maxLength: 64, pattern: '^[A-Za-z0-9.-]+$' },
+          label: { type: 'string', minLength: 1, maxLength: 80 },
+          storage: { type: 'string', maxLength: 100, pattern: '^[A-Za-z0-9._-]+$' },
+          minDiskGb: { type: 'integer', minimum: 1, maximum: 1024 },
+          bridge: { type: 'string', maxLength: 32, pattern: '^[A-Za-z0-9._-]+$' },
+          nesting: { type: 'boolean' },
+        },
+      },
+    },
+  }, async (req, reply) => {
+    const b = req.body;
+    const image = (await containerImages({ force: true })).find((i) => i.volid === b.volid && (i.shared || i.node === b.node));
+    if (!image) return badRequest(reply, `The image ${b.volid} doesn't exist on ${b.node}`);
+    if (!((await containerStorages())[b.node] ?? []).includes(b.storage)) {
+      return badRequest(reply, `The storage ${b.storage} can't hold containers on ${b.node} (content "Container" needed)`);
+    }
+    db.prepare(`
+      INSERT INTO ct_templates (volid, node, label, storage, min_disk_gb, bridge, nesting) VALUES (?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT(volid, node) DO UPDATE SET label = excluded.label, storage = excluded.storage,
+        min_disk_gb = excluded.min_disk_gb, bridge = excluded.bridge, nesting = excluded.nesting
+    `).run(b.volid, b.node, b.label.trim(), b.storage, b.minDiskGb ?? 4, b.bridge ?? 'vmbr0', b.nesting === false ? 0 : 1);
+    const row = db.prepare('SELECT id FROM ct_templates WHERE volid = ? AND node = ?').get(b.volid, b.node);
+    forgetImageCache();
+    audit(req, null, 'admin_template_offer', { label: b.label, image: b.volid, node: b.node });
+    return { id: row.id };
+  });
+
+  app.delete('/api/admin/ct-templates/:id', async (req, reply) => {
+    const row = db.prepare('SELECT * FROM ct_templates WHERE id = ?').get(Number(req.params.id));
+    if (!row) return reply.code(404).send({ error: 'Not offered' });
+    db.prepare('DELETE FROM ct_templates WHERE id = ?').run(row.id);
+    audit(req, null, 'admin_template_withdraw', { label: row.label, image: row.volid });
+    return reply.code(204).send();
   });
 
   app.put('/api/admin/templates/:vmid', {

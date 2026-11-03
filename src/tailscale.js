@@ -197,6 +197,10 @@ export async function connectTailscale(req, vmid, { authKey, mode, hostname }) {
     throw new TailscaleError(400, 'Use lowercase letters, numbers and hyphens for the Tailscale name');
   }
   const { guest, path, os } = await serverContext(req, vmid);
+  if (guest.type === 'lxc') {
+    throw new TailscaleError(400, 'Tailscale through the panel needs a VM. In a container, install Tailscale yourself '
+      + '(your provider may need to allow /dev/net/tun).');
+  }
   const net = networkOf(req.account.id);
   if (mode === 'gateway' && (os !== 'linux' || !net)) {
     throw new TailscaleError(400, 'Gateway mode needs a Linux server in your private network');

@@ -185,7 +185,7 @@ export async function backupInfo(row, guest) {
     max,
     used: backups.filter((b) => b.kind !== 'provider').length,
     fileRestore: type === 'pbs',
-    restore: guest.type === 'qemu',
+    restore: ['qemu', 'lxc'].includes(guest.type),
     schedulesAllowed: s.schedules,
     schedule: s.schedules ? presentSchedule(schedule) : null,
     job: presentJob(activeJobFor.get(row.vmid) ?? lastJob.get(row.vmid, row.user_id)),
@@ -237,7 +237,6 @@ function parseConfig(text) {
 
 export async function startRestore(req, row, guest, { volid, backupFirst = true, start = null }) {
   if (!backupsAvailableFor(row.user_id)) throw new BackupError(403, 'Backups are not available for your account');
-  if (guest.type !== 'qemu') throw new BackupError(400, 'Restoring containers is not supported here. Ask your provider.');
   busyCheck(row.vmid);
   if (activeWindowsUpdate(row.vmid)) throw new BackupError(409, 'Windows updates are being installed. Restore after they have finished.');
   await requireVisible(row, guest, volid);
@@ -449,7 +448,16 @@ async function runJob(id, { resume = false } = {}) {
       setJob(id, { state: 'running', step: 'Restoring', node: guest.node });
       // force=1 replaces the existing server (disks included); its pool membership,
       // permissions and VM ID stay. unique is off, so the MAC address stays too.
-      const upid = await pve.post(`/nodes/${encodeURIComponent(guest.node)}/qemu`, { vmid: job.vmid, archive: opt.volid, force: 1 });
+      let upid;
+      if (guest.type === 'lxc') {
+        // A container's disk goes back to the storage it is on now
+        const storage = String((await pve.get(`${path}/config`)).rootfs ?? '').split(':')[0] || undefined;
+        upid = await pve.post(`/nodes/${encodeURIComponent(guest.node)}/lxc`, {
+          vmid: job.vmid, ostemplate: opt.volid, restore: 1, force: 1, storage,
+        });
+      } else {
+        upid = await pve.post(`/nodes/${encodeURIComponent(guest.node)}/qemu`, { vmid: job.vmid, archive: opt.volid, force: 1 });
+      }
       setJob(id, { upid });
       job.upid = upid;
     }
