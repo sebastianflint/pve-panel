@@ -121,6 +121,7 @@ PVE Panel was built with substantial help from an AI assistant (**Claude by Anth
 - Manage personal VPN devices
 - Connect servers to a personal Tailscale network
 - Back up, restore and download single files from backups (Proxmox Backup Server)
+- Create LXC containers from the images offered by the administrator
 - Manage their own two-factor authentication and passkeys
 - See which panel version they're using
 
@@ -297,6 +298,7 @@ Add only what you use. The **Setup check** in the admin portal checks exactly th
 |---|---|---|
 | Basics | `/pool/customers` | `VM.Audit VM.PowerMgmt VM.Console VM.Snapshot VM.Snapshot.Rollback VM.GuestAgent.Audit`¹ |
 | Customers create servers | `/pool/customers`, `/pool/templates`, `/storage/<disk storage>` | see above |
+| Containers from images (LXC) | `/storage/<image storage>` (e.g. `/storage/local`) | `Datastore.Audit` |
 | Windows templates, Tailscale, Windows updates | `/pool/customers` | `VM.GuestAgent.Unrestricted`¹ |
 | Customer networks | `/sdn` (inherited by `/sdn/zones/<zone>`) | `SDN.Audit SDN.Allocate SDN.Use` |
 | WireGuard VPN | `/vms/<gateway VMID>` | `VM.Audit VM.GuestAgent.Unrestricted`¹ |
@@ -927,6 +929,22 @@ PVE Panel applies:
 
 ---
 
+## 📦 Container images (LXC)
+
+Besides VM templates, customers can create **containers** straight from the images Proxmox downloads (*node → local → CT Templates*, e.g. `debian-13-standard`). Nothing to prepare.
+
+- Offer an image in **Templates → Container images (LXC)**: name, disk storage, minimum disk, nesting
+- always **unprivileged**; sign-in as `root` with password and/or SSH key
+- joins the customer's private network and is **isolated like a VM** (firewall, IP and MAC filter)
+- counted against the plan; resize, reinstall, snapshots, console, backups and restores work
+- not for containers: Windows, Tailscale and Windows updates through the panel (no guest agent)
+
+Extra right: `Datastore.Audit` on the storage with the images (e.g. `/storage/local`).
+
+Details: [Templates and container images](https://sebastianflint.github.io/pve-panel/docs/guides/templates#container-images-lxc).
+
+---
+
 ## 🔌 Remote access
 
 PVE Panel supports multiple ways to reach customer systems without exposing Proxmox itself.
@@ -1212,6 +1230,7 @@ Only these file names are served, with a strict sandbox policy. Make sure you're
 │   ├── appearance.js
 │   ├── winupdate.js
 │   ├── backups.js
+│   ├── containers.js
 │   ├── oidc.js
 │   ├── vpn.js
 │   ├── agent.js

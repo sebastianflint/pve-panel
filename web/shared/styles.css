@@ -962,3 +962,4 @@ dialog p { margin: 0 0 20px; }
 .file-list .btn { padding: 7px 10px; font-size: 13px; }
 .schedule-grid :is(select, input, .btn) { height: 46px; box-sizing: border-box; }
 .file-list a.btn, .backup-list a.btn { text-decoration: none; }
+.choice-tag { font-weight: 600; margin-left: 4px; vertical-align: 1px; }

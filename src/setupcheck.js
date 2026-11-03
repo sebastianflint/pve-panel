@@ -20,6 +20,7 @@ import { updatesEnabled } from './winupdate.js';
 import { versionInfo, updateStatus } from './version.js';
 import { emailConfigured, sendMail, setupCheckMessage } from './mail.js';
 import { backupSettings, backupStorages } from './backups.js';
+import { containerImages, imageFile } from './containers.js';
 
 export const GROUPS = [
   ['proxmox', 'Proxmox connection'],
@@ -196,6 +197,10 @@ async function requirements(ctx) {
   }
   reqs.push({ path: pool, label: `Customer pool ${config.pve.pool}`, privs: poolPrivs });
 
+  // Container images: reading the image file needs Datastore.Audit on its storage
+  for (const st of [...new Set((ctx.ctTemplates ?? []).map((t) => t.volid.split(':')[0]))]) {
+    reqs.push({ path: `/storage/${st}`, label: `Image storage ${st}`, privs: [['Datastore.Audit', 'use container images']] });
+  }
   for (const t of ctx.templates) {
     reqs.push({ path: `/vms/${t.vmid}`, label: `Template ${t.vmid} (${t.label})`, privs: [['VM.Audit', 'see it'], ['VM.Clone', 'clone it']] });
   }
@@ -313,6 +318,7 @@ async function checkServers(c, ctx) {
 }
 
 async function checkTemplates(c, ctx) {
+  if (!ctx.templates.length && ctx.ctTemplates?.length) return; // only container images: checked below
   if (!ctx.templates.length) {
     c.add('templates', 'tpl:none', ctx.canCreateUsers ? 'warn' : 'info', 'No templates offered',
       ctx.canCreateUsers ? 'Some customers may create servers, but there is nothing to choose from.' : 'Customers can only use servers you assign.',
@@ -382,6 +388,42 @@ async function checkTemplates(c, ctx) {
       c.add('templates', `tpl:${t.vmid}`, status, `${name}: ${problems.length} problem${problems.length > 1 ? 's' : ''}`,
         problems.map((p) => p.text).join('; ') + '.',
         commands.length ? { text: 'On a Proxmox node (a template can be changed without booting it):', commands } : null);
+    }
+  }
+}
+
+/** Offered container images: the file still exists, the disk storage is usable. */
+async function checkContainerImages(c, ctx) {
+  if (!ctx.ctTemplates.length) return;
+  const images = await containerImages({ force: true });
+  for (const t of ctx.ctTemplates) {
+    const name = `Container image ${t.label}`;
+    const there = images.some((i) => i.volid === t.volid && (i.shared || i.node === t.node));
+    if (!there) {
+      c.add('templates', `ct:${t.id}`, 'error', `${name} is offered but the file is gone`,
+        `${imageFile(t.volid)} no longer exists on ${t.node} (or the token can't read its storage). Customers can't create containers from it.`,
+        { text: 'Download it again in Proxmox (node, storage, CT Templates), or offer another image under Templates.' });
+      continue;
+    }
+    let s = null;
+    try {
+      s = await pve.get(`/nodes/${encodeURIComponent(t.node)}/storage/${encodeURIComponent(t.storage)}/status`);
+    } catch (err) {
+      if (err?.statusCode !== 403) {
+        c.add('templates', `ct:${t.id}`, 'error', `${name}: the storage ${t.storage} isn't available on ${t.node}`, err.message,
+          { text: 'Choose another storage for container disks under Templates.' });
+        continue;
+      }
+    }
+    const free = s ? (s.avail ?? 0) / GB : null;
+    const total = s ? (s.total ?? 0) / GB : null;
+    if (s && s.active === 0) {
+      c.add('templates', `ct:${t.id}`, 'error', `${name}: the storage ${t.storage} is not active`);
+    } else if (s && (free < t.min_disk_gb * 2 || (total && free / total < 0.1))) {
+      c.add('templates', `ct:${t.id}`, 'warn', `${name}: the storage ${t.storage} has only ${free.toFixed(0)} GB free of ${total.toFixed(0)} GB`);
+    } else {
+      c.add('templates', `ct:${t.id}`, 'ok', `${name} is ready`,
+        `${imageFile(t.volid)} on ${t.node}; unprivileged container${t.nesting ? ' with nesting' : ''}, disks on ${t.storage}.`);
     }
   }
 }
@@ -693,7 +735,8 @@ async function runOnce({ requestIp = null, automatic = false, log } = {}) {
     ctx.templates = db.prepare('SELECT * FROM templates ORDER BY vmid').all();
     ctx.windowsTemplates = ctx.templates.some((t) => t.setup === 'windows');
     ctx.canCreateUsers = db.prepare('SELECT COUNT(*) AS n FROM users WHERE can_create = 1 AND deleting = 0').get().n > 0;
-    ctx.creating = ctx.templates.length > 0 || ctx.canCreateUsers;
+    ctx.ctTemplates = db.prepare('SELECT * FROM ct_templates ORDER BY label').all();
+    ctx.creating = ctx.templates.length > 0 || ctx.ctTemplates.length > 0 || ctx.canCreateUsers;
     ctx.windowsServers = db.prepare("SELECT COUNT(*) AS n FROM vms WHERE ostype LIKE 'win%'").get().n > 0;
     ctx.storages = [...new Set(ctx.templates.map((t) => {
       if (t.storage) return t.storage;
@@ -709,9 +752,11 @@ async function runOnce({ requestIp = null, automatic = false, log } = {}) {
         if (st && !ctx.storages.includes(st)) ctx.storages.push(st);
       } catch { /* reported by the template check */ }
     }
+    for (const t of ctx.ctTemplates) if (!ctx.storages.includes(t.storage)) ctx.storages.push(t.storage);
     await step('permissions', checkPermissions);
     await step('servers', checkServers);
     await step('templates', checkTemplates);
+    await step('templates', checkContainerImages);
     await step('network', checkNetworks);
   }
   await step('remote', checkRemote);

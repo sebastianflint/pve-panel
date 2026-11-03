@@ -16,6 +16,7 @@ interface checks exactly these rights and shows the command for anything missing
 | Customers create servers | `/pool/customers` | + `VM.Allocate VM.Config.CPU VM.Config.Memory VM.Config.Disk VM.Config.Cloudinit VM.Config.Options VM.Config.Network` |
 | | `/pool/templates` | PanelCustomer (needs `VM.Audit VM.Clone`) |
 | | `/storage/<disk storage>` | PanelCustomer (needs `Datastore.AllocateSpace Datastore.Audit`) |
+| Containers from images (LXC) | `/storage/<image storage>`, e.g. `/storage/local` | PanelImages: `Datastore.Audit` (plus "create servers") |
 | Windows templates, Tailscale, Windows updates | `/pool/customers` | + guest agent commands² |
 | Customer networks (`CUSTOMER_NETWORKS=true`) | `/sdn` (covers `/sdn/zones/<zone>`) | PanelNetwork: `SDN.Audit SDN.Allocate SDN.Use` |
 | WireGuard VPN (`VPN_ENABLED=true`) | `/vms/<gateway VMID>` | PanelGateway: `VM.Audit` + guest agent commands² |
@@ -80,6 +81,20 @@ pveum acl modify /storage/VMStorage --users panel@pve --roles PanelCustomer
 
 New servers are placed into the `customers` pool (`PVE_POOL`), so the panel's
 normal rights cover them automatically.
+
+**Container images (LXC):** customers can also create containers from downloaded
+images ([Templates and container images](../guides/templates#container-images-lxc)).
+The rights above cover them; additionally the panel reads the image file and creates
+the container's disk:
+
+```bash
+# The storage the images are on (node → local → CT Templates)
+pveum role add PanelImages --privs "Datastore.Audit"
+pveum acl modify /storage/local --users panel@pve --roles PanelImages
+
+# The storage container disks go to, if not already granted above
+pveum acl modify /storage/local-lvm --users panel@pve --roles PanelCustomer
+```
 
 ## Guest agent commands: Windows, Tailscale, Windows updates
 

@@ -320,7 +320,7 @@ function renderDetail() {
     vm.memoryMb ? `${bytes(vm.memoryMb * 1024 * 1024)} memory` : null,
   ].filter(Boolean).join(', ');
   const tabs = [['overview', 'Overview', 'chart'], ['snapshots', 'Snapshots', 'camera'], ['console', 'Console', 'terminal']];
-  if (state.account.tailscale) tabs.push(['remote', 'Remote access', 'link']);
+  if (state.account.tailscale && vm.type !== 'lxc') tabs.push(['remote', 'Remote access', 'link']);
   if (state.account.backups) tabs.push(['backups', 'Backups', 'archive']);
   if (vm.osFamily === 'windows') tabs.push(['updates', 'Updates', 'download']);
 
@@ -823,7 +823,7 @@ function renderCreate() {
               <label class="choice">
                 <input type="radio" name="templateId" value="${t.id}" ${t === first ? 'checked' : ''}
                        ${t.minDiskGb > left.diskGb ? 'disabled' : ''}>
-                <span><strong>${esc(t.name)}</strong>
+                <span><strong>${esc(t.name)}${t.kind === 'container' ? ' <span class="tag choice-tag">Container</span>' : ''}</strong>
                 <span class="muted">Needs at least ${t.minDiskGb} GB disk</span></span>
               </label>`).join('')}
           </div>
@@ -855,11 +855,11 @@ function renderCreate() {
                      placeholder="web01" autocomplete="off">
               <span class="hint" id="hostname-hint">Lowercase letters, numbers and hyphens.</span>
             </label>
-            <label data-os="linux">Username
+            <label data-os="cloudinit">Username
               <input name="username" required maxlength="32" pattern="[a-z_][a-z0-9_\\-]*"
-                     value="${esc(first.setup === 'windows' ? 'admin' : (first.defaultUser || 'admin'))}" autocomplete="off">
+                     value="${esc(first.setup !== 'cloudinit' ? 'admin' : (first.defaultUser || 'admin'))}" autocomplete="off">
             </label>
-            <div data-os="windows" class="fixed-user">
+            <div data-os="windows container" class="fixed-user">
               <span class="label">User</span>
               <span class="mono" id="windows-user"></span>
             </div>
@@ -869,10 +869,10 @@ function renderCreate() {
               <input name="password" type="password" minlength="12" maxlength="200" autocomplete="new-password">
               <button type="button" class="btn" data-generate>Generate</button>
             </span>
-            <span class="hint" data-os="linux">At least 12 characters. Leave empty if you only want to sign in with an SSH key.</span>
+            <span class="hint" data-os="cloudinit container">At least 12 characters. Leave empty if you only want to sign in with an SSH key.</span>
             <span class="hint" data-os="windows">At least 12 characters with three of: lowercase, uppercase, numbers, symbols.</span>
           </label>
-          <label data-os="linux">SSH public keys
+          <label data-os="cloudinit container">SSH public keys
             <textarea name="sshKeys" rows="3" spellcheck="false" placeholder="ssh-ed25519 AAAA… you@laptop"></textarea>
             <span class="hint">Optional. One key per line.</span>
           </label>
@@ -888,17 +888,20 @@ function renderCreate() {
   applyTemplateMode($('#create-form'), first);
 }
 
-/** Shows the fields that apply to the chosen image (cloud-init vs Windows). */
+const findTemplate = (value) => state.templates.find((t) => String(t.id) === String(value));
+
+/** Shows the fields that apply to the chosen image: cloud-init, Windows or container. */
 function applyTemplateMode(form, tpl) {
-  const windows = tpl.setup === 'windows';
+  const mode = tpl.setup;                 // cloudinit | windows | container
+  const windows = mode === 'windows';
   form.querySelectorAll('[data-os]').forEach((el) => {
-    const hide = el.dataset.os !== (windows ? 'windows' : 'linux');
+    const hide = !el.dataset.os.split(' ').includes(mode);
     el.hidden = hide;
     // Disabled fields are skipped by browser validation. Without this, a hidden
     // field with an invalid value blocks the form without any visible message.
     el.querySelectorAll('input, textarea, select').forEach((f) => { f.disabled = hide; });
   });
-  form.username.required = !windows;
+  form.username.required = mode === 'cloudinit';
   form.password.required = windows;
   if (form.hostname) {
     form.hostname.maxLength = windows ? 15 : 63;
@@ -906,16 +909,16 @@ function applyTemplateMode(form, tpl) {
       ? 'Lowercase letters, numbers and hyphens, at most 15 characters.'
       : 'Lowercase letters, numbers and hyphens.';
   }
-  form.querySelector('#windows-user').textContent = windows ? tpl.defaultUser : '';
+  form.querySelector('#windows-user').textContent = mode === 'cloudinit' ? '' : tpl.defaultUser;
 }
 
 function onTemplateChange(form) {
-  const tpl = state.templates.find((t) => t.id === Number(form.templateId.value));
+  const tpl = findTemplate(form.templateId.value);
   if (!tpl) return;
   const disk = form.diskGb;
   disk.min = tpl.minDiskGb;
   if (Number(disk.value) < tpl.minDiskGb) disk.value = tpl.minDiskGb;
-  if (!form.username.dataset.edited && tpl.setup !== 'windows') form.username.value = tpl.defaultUser || 'admin';
+  if (!form.username.dataset.edited && tpl.setup === 'cloudinit') form.username.value = tpl.defaultUser || 'admin';
   applyTemplateMode(form, tpl);
 }
 
@@ -1436,6 +1439,8 @@ async function openReinstall() {
 
 function renderReinstall(vm) {
   const name = vm.name;
+  // a container is reinstalled from a container image, a VM from a VM template
+  state.templates = state.templates.filter((t) => (t.kind === 'container') === (vm.type === 'lxc'));
   const fits = (t) => !vm.diskGb || t.minDiskGb <= vm.diskGb;
   const current = state.templates.find((t) => t.id === vm.templateId && fits(t));
   const first = current ?? state.templates.find(fits);
@@ -1473,11 +1478,11 @@ function renderReinstall(vm) {
         <fieldset>
           <legend>New sign-in</legend>
           <div class="grid-2">
-            <label data-os="linux">Username
+            <label data-os="cloudinit">Username
               <input name="username" required maxlength="32" pattern="[a-z_][a-z0-9_\\-]*"
-                     value="${esc(first.setup === 'windows' ? 'admin' : (first.defaultUser || 'admin'))}" autocomplete="off">
+                     value="${esc(first.setup !== 'cloudinit' ? 'admin' : (first.defaultUser || 'admin'))}" autocomplete="off">
             </label>
-            <div data-os="windows" class="fixed-user">
+            <div data-os="windows container" class="fixed-user">
               <span class="label">User</span>
               <span class="mono" id="windows-user"></span>
             </div>
@@ -1487,10 +1492,10 @@ function renderReinstall(vm) {
               <input name="password" type="password" minlength="12" maxlength="200" autocomplete="new-password">
               <button type="button" class="btn" data-generate>Generate</button>
             </span>
-            <span class="hint" data-os="linux">At least 12 characters. Leave empty if you only want to sign in with an SSH key.</span>
+            <span class="hint" data-os="cloudinit container">At least 12 characters. Leave empty if you only want to sign in with an SSH key.</span>
             <span class="hint" data-os="windows">At least 12 characters with three of: lowercase, uppercase, numbers, symbols.</span>
           </label>
-          <label data-os="linux">SSH public keys
+          <label data-os="cloudinit container">SSH public keys
             <textarea name="sshKeys" rows="3" spellcheck="false" placeholder="ssh-ed25519 AAAA… you@laptop"></textarea>
             <span class="hint">Optional. One key per line.</span>
           </label>
@@ -1522,12 +1527,12 @@ async function submitReinstall(form) {
   err.textContent = '';
   if (form.confirm.value.trim() !== state.detail?.name) return;
   if (!form.reportValidity()) return;
-  const tpl = state.templates.find((t) => t.id === Number(form.templateId.value));
+  const tpl = findTemplate(form.templateId.value);
   const windows = tpl?.setup === 'windows';
   const body = { templateId: tpl.id };
   if (form.password.value) body.password = form.password.value;
   if (!windows) {
-    body.username = form.username.value.trim();
+    if (tpl.setup === 'cloudinit') body.username = form.username.value.trim();
     if (form.sshKeys.value.trim()) body.sshKeys = form.sshKeys.value.trim();
   }
   const button = $('#reinstall-submit');
@@ -1554,7 +1559,7 @@ async function submitCreate(form) {
     err.textContent = `Check ${label}: ${bad?.validationMessage || 'the value is not valid'}`;
     return;
   }
-  const tpl = state.templates.find((t) => t.id === Number(form.templateId.value));
+  const tpl = findTemplate(form.templateId.value);
   const windows = tpl?.setup === 'windows';
   const password = form.password.value;
   const sshKeys = windows ? '' : form.sshKeys.value.trim();
@@ -1565,9 +1570,9 @@ async function submitCreate(form) {
     return;
   }
   const body = {
-    templateId: Number(form.templateId.value),
+    templateId: tpl.id,
     hostname: form.hostname.value.trim(),
-    ...(windows ? {} : { username: form.username.value.trim() }),
+    ...(tpl.setup === 'cloudinit' ? { username: form.username.value.trim() } : {}),
     cores: Number(form.cores.value),
     memoryMb: Number(form.memoryMb.value),
     diskGb: Number(form.diskGb.value),
@@ -1816,8 +1821,8 @@ $('#detail').addEventListener('click', (e) => {
 $('#detail').addEventListener('change', (e) => {
   const reinstall = e.target.closest('#reinstall-form');
   if (reinstall && e.target.name === 'templateId') {
-    const tpl = state.templates.find((t) => t.id === Number(e.target.value));
-    if (tpl && !reinstall.username.dataset.edited && tpl.setup !== 'windows') reinstall.username.value = tpl.defaultUser || 'admin';
+    const tpl = findTemplate(e.target.value);
+    if (tpl && !reinstall.username.dataset.edited && tpl.setup === 'cloudinit') reinstall.username.value = tpl.defaultUser || 'admin';
     if (tpl) applyTemplateMode(reinstall, tpl);
     return;
   }

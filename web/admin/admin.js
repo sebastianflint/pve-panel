@@ -148,7 +148,9 @@ export function createAdmin({ root, api, toast, fail, confirmAction, promptText,
       } else if (st.tab === 'vpn') {
         st.vpn = await api('/api/admin/vpn');
       } else if (st.tab === 'templates') {
-        ({ templates: st.templates, storages: st.storages } = await api('/api/admin/templates'));
+        const t = await api('/api/admin/templates');
+        ({ templates: st.templates, storages: st.storages } = t);
+        st.ct = { images: t.containers ?? [], missing: t.missingContainers ?? [], storages: t.containerStorages ?? {}, networksEnabled: t.networksEnabled };
       } else {
         st.audit = await api('/api/admin/audit?limit=200');
       }
@@ -679,17 +681,59 @@ export function createAdmin({ root, api, toast, fail, confirmAction, promptText,
   // ---- templates --------------------------------------------------------
   function renderTemplates() {
     const body = root.querySelector('#admin-body');
-    if (!st.templates.length) {
-      body.innerHTML = `
-        <div class="empty">
-          <h2>No templates in the cluster</h2>
-          <p class="muted">Customers create servers by cloning a Proxmox template. Prepare a VM with cloud-init,
-          convert it to a template in Proxmox and add it to the panel's pool; it then appears here.</p>
-        </div>`;
-      return;
-    }
     body.innerHTML = `
-      <p class="muted" style="margin-top:0">Customers who may create servers can choose from the templates offered here.
+      <h2 class="h2">VM templates</h2>
+      ${st.templates.length ? vmTemplatesTable() : `
+        <p class="muted">No VM templates in the cluster. Prepare a VM with cloud-init (or a sysprep'd Windows), convert it to a
+          template in Proxmox and add it to the panel's templates pool; it then appears here.</p>`}
+      <h2 class="h2">Container images (LXC)</h2>
+      ${containersTable()}`;
+  }
+
+  function containersTable() {
+    const ct = st.ct ?? { images: [], missing: [], storages: {} };
+    const size = (b) => (b ? `${(b / 2 ** 20).toFixed(0)} MB` : '');
+    return `
+      <p class="muted" style="margin-top:-4px">Images downloaded in Proxmox under <em>node → storage → CT Templates</em>
+        (e.g. Debian, Ubuntu, Alpine). Customers get an <strong>unprivileged</strong> container and sign in as <span class="mono">root</span>
+        with their password or SSH key. Containers start in seconds and use little memory, but run on the host's kernel:
+        no Windows, no own kernel modules, no Tailscale or Windows updates through the panel.</p>
+      ${ct.missing.length ? `<div class="notice warn"><p><strong>Offered but the file is gone:</strong>
+        ${ct.missing.map((m) => `${esc(m.label)} <span class="mono small">(${esc(m.volid)} on ${esc(m.node)})</span>
+          <button class="btn" data-ct-withdraw="${m.id}">Withdraw</button>`).join(' ')}</p></div>` : ''}
+      ${ct.images.length ? `
+        <div class="table-wrap">
+          <table class="table">
+            <thead><tr>
+              <th>Image in Proxmox</th><th>Offered</th><th>Name shown to customers</th><th>Disk storage</th>
+              <th>Min. disk (GB)</th>${ct.networksEnabled ? '' : '<th>Bridge</th>'}<th>Nesting</th><th><span class="sr-only">Save</span></th>
+            </tr></thead>
+            <tbody>
+              ${ct.images.map((c, i) => `
+                <tr data-ct="${i}">
+                  <td><span class="mono">${esc(c.file)}</span><br><span class="muted small">${esc(c.node)}${c.shared ? ' (shared storage)' : ''} · ${esc(c.volid.split(':')[0])} · ${esc(size(c.size))}</span></td>
+                  <td><input type="checkbox" data-f="offered" ${c.offered ? 'checked' : ''} aria-label="Offer ${esc(c.file)}"></td>
+                  <td><input data-f="label" value="${esc(c.label)}" placeholder="e.g. Debian 13 (container)" maxlength="80"></td>
+                  <td><select data-f="storage" aria-label="Disk storage for ${esc(c.file)}">
+                    ${(ct.storages[c.node] ?? []).map((s) => `<option ${s === (c.storage || 'local-lvm') ? 'selected' : ''}>${esc(s)}</option>`).join('')}
+                  </select></td>
+                  <td><input data-f="minDiskGb" type="number" min="1" max="1024" value="${esc(c.minDiskGb)}" class="narrow"></td>
+                  ${ct.networksEnabled ? '' : `<td><input data-f="bridge" value="${esc(c.bridge)}" maxlength="32" class="narrow mono"></td>`}
+                  <td><input type="checkbox" data-f="nesting" ${c.nesting ? 'checked' : ''} aria-label="Nesting for ${esc(c.file)}"></td>
+                  <td><button class="btn" data-save-ct>Save</button></td>
+                </tr>`).join('')}
+            </tbody>
+          </table>
+        </div>
+        <p class="muted small"><strong>Disk storage:</strong> where the container's disk is created (content “Container”).
+          <strong>Nesting:</strong> needed by systemd in current distributions (Debian 12+, Ubuntu 24.04+); keep it on unless you have a reason.
+          ${ct.networksEnabled ? 'Containers join the customer\'s private network and are isolated like VMs.' : '<strong>Bridge:</strong> the network the container is connected to (customer networks are off).'}</p>`
+        : '<p class="muted">No container images found. Download one in Proxmox: node → local → CT Templates → Templates.</p>'}`;
+  }
+
+  function vmTemplatesTable() {
+    return `
+      <p class="muted" style="margin-top:-4px">Customers who may create servers can choose from the templates offered here.
         Linux templates are set up with cloud-init, Windows templates through the QEMU guest agent.</p>
       <div class="table-wrap">
         <table class="table">
@@ -729,6 +773,35 @@ export function createAdmin({ root, api, toast, fail, confirmAction, promptText,
         <span class="mono">ipconfig0</span> value, e.g. <span class="mono">ip=dhcp</span>.
         <strong>Guest agent (Windows):</strong> the template must be sysprep'd with the QEMU guest agent installed and enabled;
         the panel sets the password of User (default Administrator) and the computer name.</p>`;
+  }
+
+  async function saveContainer(row) {
+    const c = st.ct.images[Number(row.dataset.ct)];
+    const field = (f) => row.querySelector(`[data-f="${f}"]`);
+    const offered = field('offered').checked;
+    const label = field('label').value.trim();
+    try {
+      if (!offered) {
+        if (c.id) await api(`/api/admin/ct-templates/${c.id}`, { method: 'DELETE' });
+        Object.assign(c, { offered: false, id: null });
+        return toast(`${c.file} is not offered`);
+      }
+      if (!label) {
+        field('label').focus();
+        return toast('Give the image a name customers will recognise', 'error');
+      }
+      const r = await api('/api/admin/ct-templates', {
+        method: 'PUT',
+        body: {
+          volid: c.volid, node: c.node, label, storage: field('storage').value,
+          minDiskGb: Number(field('minDiskGb').value) || 4,
+          ...(field('bridge') ? { bridge: field('bridge').value.trim() || 'vmbr0' } : {}),
+          nesting: field('nesting').checked,
+        },
+      });
+      Object.assign(c, { offered: true, id: r.id, label });
+      toast(`${label} is offered to customers`);
+    } catch (err) { fail(err); }
   }
 
   async function saveTemplate(row) {
@@ -1501,6 +1574,18 @@ export function createAdmin({ root, api, toast, fail, confirmAction, promptText,
 
     if (t.hasAttribute('data-save-template')) {
       saveTemplate(t.closest('tr'));
+      return;
+    }
+    if (t.hasAttribute('data-save-ct')) {
+      saveContainer(t.closest('tr'));
+      return;
+    }
+    if (t.dataset.ctWithdraw) {
+      try {
+        await api(`/api/admin/ct-templates/${t.dataset.ctWithdraw}`, { method: 'DELETE' });
+        toast('Withdrawn');
+        load();
+      } catch (err) { fail(err); }
       return;
     }
 

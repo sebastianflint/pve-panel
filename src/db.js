@@ -276,6 +276,23 @@ db.exec(`
   );
 `);
 
+// Container images (LXC templates, e.g. local:vztmpl/debian-13-standard_….tar.zst)
+// customers can create containers from. A file on a node-local storage exists
+// per node, so the node is part of the key.
+db.exec(`
+  CREATE TABLE IF NOT EXISTS ct_templates (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    volid       TEXT NOT NULL,
+    node        TEXT NOT NULL,
+    label       TEXT NOT NULL,
+    storage     TEXT NOT NULL,                  -- where the container's disk is created
+    min_disk_gb INTEGER NOT NULL DEFAULT 4,
+    bridge      TEXT NOT NULL DEFAULT 'vmbr0',  -- used when customer networks are off
+    nesting     INTEGER NOT NULL DEFAULT 1,     -- needed by systemd in current distributions
+    UNIQUE (volid, node)
+  );
+`);
+
 // Background jobs don't survive a restart; don't leave servers stuck forever.
 db.exec(`
   UPDATE vms SET state = 'failed', error = 'Setup was interrupted because the panel restarted'

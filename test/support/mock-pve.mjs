@@ -43,6 +43,9 @@ export async function startMockPve({ port = 0 } = {}) {
   const destroyed = []; // DELETE calls, for assertions
 
   const tsApproved = new Set();
+  // Container images on the "local" storage, and every container create/restore call
+  const ctImages = new Set(['local:vztmpl/debian-13-standard_13.6-1_amd64.tar.zst', 'local:vztmpl/alpine-3.22-default_20250617_amd64.tar.xz']);
+  const ctCreates = [];
 
   // ---- Setup check state ---------------------------------------------------------
   const VM_PRIVS = ['VM.Audit', 'VM.PowerMgmt', 'VM.Console', 'VM.Snapshot', 'VM.Snapshot.Rollback', 'VM.GuestAgent.Audit',
@@ -177,7 +180,7 @@ export async function startMockPve({ port = 0 } = {}) {
     const u = new URL(req.url, 'http://x'); const p = u.pathname.replace('/api2/json','');
     if (req.headers.authorization !== 'PVEAPIToken=panel@pve!panel=x') return send(res, null, 401);
     // like Proxmox: the pool of a guest is only shown with Pool.Audit on that pool
-    if (p === '/cluster/resources') return send(res, [...vms.values()].map(({cfg, pool, ...v}) => ({...v, ...(pool && 'Pool.Audit' in effective(`/pool/${pool}`) ? { pool } : {}), id:`qemu/${v.vmid}`, cpu:0.05, mem:v.maxmem/4, uptime: v.status==='running'?600:0})));
+    if (p === '/cluster/resources') return send(res, [...vms.values()].map(({cfg, pool, ...v}) => ({...v, ...(pool && 'Pool.Audit' in effective(`/pool/${pool}`) ? { pool } : {}), id:`${v.type}/${v.vmid}`, cpu:0.05, mem:v.maxmem/4, uptime: v.status==='running'?600:0})));
     if (p === '/version') return send(res, { version: '9.0.6', release: '9.0', repoid: 'mock' });
     if (p === '/access/permissions') { const path = u.searchParams.get('path') ?? '/'; return send(res, { [path]: effective(path) }); }
     if (p === '/cluster/firewall/options') { if (!('Sys.Audit' in effective('/'))) return send(res, null, 403, 'Permission check failed (/, Sys.Audit)'); return send(res, cluster.firewall); }
@@ -194,7 +197,10 @@ export async function startMockPve({ port = 0 } = {}) {
     if (p === '/__vms') return send(res, [...vms.keys()]);
     if (p.startsWith('/__clearfw/')) { const v = vms.get(Number(p.split('/')[2])); v.fwRules = (v.fwRules ?? []).filter(r => r.type !== 'out'); return send(res, 'cleared'); }
     if (p === '/cluster/nextid') { const want = u.searchParams.get('vmid'); if (want) return vms.has(Number(want)) ? send(res,null,400,`VM ${want} already exists`) : send(res, want); let id=100; while (vms.has(id)) id++; return send(res, String(id)); }
+    if (p === '/nodes') return send(res, [{ node: 'pve1', status: 'online' }]);
     if (/^\/nodes\/[^/]+\/storage$/.test(p)) {
+      if (u.searchParams.get('content') === 'vztmpl') return send(res, [{ storage: 'local', type: 'dir', content: 'vztmpl,iso,backup', active: 1, shared: 0 }]);
+      if (u.searchParams.get('content') === 'rootdir') return send(res, [{ storage: 'local-lvm', type: 'lvmthin', content: 'rootdir,images', active: 1 }, { storage: 'VMStorage', type: 'zfspool', content: 'rootdir,images', active: 1 }]);
       if (u.searchParams.get('content') === 'backup') return send(res, [{ storage: 'pbs', type: 'pbs', content: 'backup', active: 1 }, { storage: 'local', type: 'dir', content: 'backup,iso,vztmpl', active: 1 }]);
       return send(res, [{storage:'VMStorage'},{storage:'local-lvm'}]);
     }
@@ -217,6 +223,9 @@ export async function startMockPve({ port = 0 } = {}) {
       return send(res, Object.entries(bk.cfg).map(([k, v]) => `${k}: ${v}`).join('\n') + '\n');
     }
     const sc = p.match(/^\/nodes\/[^/]+\/storage\/([^/]+)\/content(?:\/(.+))?$/);
+    if (sc && req.method === 'GET' && !sc[2] && u.searchParams.get('content') === 'vztmpl') {
+      return send(res, sc[1] !== 'local' ? [] : [...ctImages].map((volid) => ({ volid, content: 'vztmpl', format: volid.endsWith('.zst') ? 'tzst' : 'tgz', size: 129_876_543, ctime: 1793000000 })));
+    }
     if (sc && req.method === 'GET' && !sc[2]) {
       const vmidFilter = u.searchParams.get('vmid');
       return send(res, [...backups.values()].filter((x) => x.storage === sc[1] && (!vmidFilter || x.vmid === Number(vmidFilter)))
@@ -241,6 +250,33 @@ export async function startMockPve({ port = 0 } = {}) {
       if (tree.content[fp] !== undefined) { res.writeHead(200, { 'content-type': 'application/octet-stream', 'content-length': Buffer.byteLength(tree.content[fp]) }); return res.end(tree.content[fp]); }
       if (tree[fp]) { const zip = Buffer.concat([Buffer.from('PK\x03\x04'), Buffer.from(`zip of ${fp}`)]); res.writeHead(200, { 'content-type': 'application/zip' }); return res.end(zip); }
       return send(res, null, 500, `path not found: ${fp}`);
+    }
+    // ---- containers: create from an image, or restore a container backup ----------------
+    if (/^\/nodes\/[^/]+\/lxc$/.test(p) && req.method === 'POST') {
+      const b = await body(req); const vmid = Number(b.vmid);
+      ctCreates.push(b); log('LXC CREATE', vmid, JSON.stringify({ ...b, password: b.password ? '***' : undefined }));
+      if (String(b.restore) === '1') {
+        const vm = vms.get(vmid); const bk = backups.get(b.ostemplate);
+        if (!bk) return send(res, null, 500, `volume '${b.ostemplate}' does not exist`);
+        if (!vm || String(b.force) !== '1') return send(res, null, 500, `CT ${vmid} already exists`);
+        if (vm.status !== 'stopped') return send(res, null, 500, `unable to restore CT ${vmid} - CT is running`);
+        vm.lock = 'create';
+        return send(res, task('vzrestore', vmid, 1500, () => {
+          vm.cfg = JSON.parse(JSON.stringify(bk.cfg)); vm.fwRules = JSON.parse(JSON.stringify(bk.fwRules)); vm.fwOptions = { ...bk.fwOptions };
+          vm.restoredFrom = bk.volid; vm.restoreStorage = b.storage; delete vm.lock;
+        }));
+      }
+      if (vms.has(vmid)) return send(res, null, 500, `CT ${vmid} already exists on node 'pve1'`);
+      if (!ctImages.has(b.ostemplate)) return send(res, null, 500, `volume '${b.ostemplate}' does not exist`);
+      if (String(b.unprivileged) !== '1') return send(res, null, 403, 'Permission check failed (privileged containers need root@pam)');
+      if (b.features && b.features !== 'nesting=1') return send(res, null, 403, "changing feature flags (except nesting) is only allowed for root@pam");
+      const [storage, size] = String(b.rootfs).split(':');
+      const net0 = /hwaddr=/.test(b.net0) ? b.net0 : b.net0.replace(/^(name=eth0,bridge=[^,]+)/, `$1,hwaddr=${newMac()}`);
+      const cfg = { arch: 'amd64', ostype: 'debian', hostname: b.hostname, cores: Number(b.cores), memory: Number(b.memory), swap: Number(b.swap),
+        rootfs: `${storage}:vm-${vmid}-disk-0,size=${size}G`, net0, unprivileged: 1, ...(b.features ? { features: b.features } : {}) };
+      vms.set(vmid, { vmid, node: 'pve1', type: 'lxc', name: b.hostname, pool: b.pool, status: 'stopped', lock: 'create',
+        maxcpu: Number(b.cores), maxmem: Number(b.memory) * 2 ** 20, maxdisk: Number(size) * 2 ** 30, cfg, ctPassword: b.password, ctKeys: b['ssh-public-keys'] });
+      return send(res, task('vzcreate', vmid, 1500, () => { delete vms.get(vmid)?.lock; }));
     }
     if (/^\/nodes\/[^/]+\/qemu$/.test(p) && req.method === 'POST') {
       const b = await body(req); const vmid = Number(b.vmid); const vm = vms.get(vmid); const bk = backups.get(b.archive);
@@ -270,9 +306,23 @@ export async function startMockPve({ port = 0 } = {}) {
     const t = p.match(/\/tasks\/(.+)\/status$/);
     if (t) { const x = tasks.get(decodeURIComponent(t[1])); if (!x) return send(res,null,404);
       if (Date.now() > x.done) { if (!x.fired) { x.fired=true; x.then(); } return send(res,{status:'stopped',exitstatus:x.exit||'OK'}); } return send(res,{status:'running'}); }
-    const m = p.match(/^\/nodes\/([^/]+)\/qemu\/(\d+)(\/.*)?$/);
+    const m = p.match(/^\/nodes\/([^/]+)\/(qemu|lxc)\/(\d+)(\/.*)?$/);
     if (!m) return send(res, null, 501);
-    const vmid = Number(m[2]); const rest = m[3] || ''; const vm = vms.get(vmid);
+    const vmid = Number(m[3]); const rest = m[4] || ''; const vm = vms.get(vmid);
+    if (vm && vm.type !== m[2]) return send(res, null, 500, `Configuration file 'nodes/pve1/${m[2] === 'lxc' ? 'lxc' : 'qemu-server'}/${vmid}.conf' does not exist`);
+    if (vm?.type === 'lxc') {
+      if (rest.startsWith('/agent')) return send(res, null, 501, 'Method not implemented');
+      if (rest === '/interfaces') {
+        const n = /bridge=cu0*(\d+)/.exec(vm.cfg.net0 ?? '')?.[1];
+        return send(res, vm.status !== 'running' ? null : [{ name: 'lo', inet: '127.0.0.1/8' }, { name: 'eth0', hwaddr: /hwaddr=([^,]+)/.exec(vm.cfg.net0)?.[1], inet: `${n ? `10.100.${n}` : '192.168.1'}.123/24` }]);
+      }
+      if (rest === '/resize' && req.method === 'PUT') { const b = await body(req); log('CT RESIZE', vmid, JSON.stringify(b));
+        vm.cfg.rootfs = vm.cfg.rootfs.replace(/size=[^,]+/, `size=${b.size}`); vm.maxdisk = parseInt(b.size) * 2 ** 30; return send(res, task('resize', vmid, 500)); }
+      if (rest === '/config' && req.method === 'PUT') { const b = await body(req);
+        if ('sockets' in b) return send(res, null, 400, 'property is not defined in schema and the schema does not allow additional properties: sockets');
+        Object.assign(vm.cfg, b); if (b.cores) vm.maxcpu = Number(b.cores); if (b.memory) vm.maxmem = Number(b.memory) * 2 ** 20; log('CT CONFIG', vmid, JSON.stringify(b)); return send(res, null); }
+      if (rest === '/status/current') return send(res, { status: vm.status, cpus: vm.maxcpu, uptime: 600, mem: vm.maxmem / 4, maxmem: vm.maxmem });
+    }
     if (!vm) return send(res, null, 500, `Configuration file 'nodes/pve1/qemu-server/${vmid}.conf' does not exist`);
     if (rest === '' && req.method === 'DELETE') { destroyed.push(`DELETE ${vmid} ${u.search}`); log('DESTROY', vmid, u.search);
       if (vm.status !== 'stopped') return send(res, null, 500, 'VM is running'); return send(res, task('qmdestroy', vmid, 1000, () => vms.delete(vmid))); }
@@ -387,7 +437,7 @@ export async function startMockPve({ port = 0 } = {}) {
   return {
     url: `http://127.0.0.1:${actualPort}`,
     port: actualPort,
-    vms, sdn, gwFiles, destroyed, perms, cluster, storageStatus, backups,
+    vms, sdn, gwFiles, destroyed, perms, cluster, storageStatus, backups, ctImages, ctCreates,
     /** GET a control endpoint, e.g. control('/__lose/104/1') */
     control: (p) => fetch(`http://127.0.0.1:${actualPort}/api2/json${p}`, {
       headers: { authorization: 'PVEAPIToken=panel@pve!panel=x' },
