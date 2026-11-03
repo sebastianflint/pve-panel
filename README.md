@@ -289,6 +289,38 @@ pveum acl modify /storage/VMStorage \
 
 Newly provisioned servers are automatically added to the pool defined by `PVE_POOL`.
 
+### Rights per feature
+
+Add only what you use. The **Setup check** in the admin portal checks exactly these and shows the command for anything missing.
+
+| Feature | Path | Privileges |
+|---|---|---|
+| Basics | `/pool/customers` | `VM.Audit VM.PowerMgmt VM.Console VM.Snapshot VM.Snapshot.Rollback VM.GuestAgent.Audit`¹ |
+| Customers create servers | `/pool/customers`, `/pool/templates`, `/storage/<disk storage>` | see above |
+| Windows templates, Tailscale, Windows updates | `/pool/customers` | `VM.GuestAgent.Unrestricted`¹ |
+| Customer networks | `/sdn` (inherited by `/sdn/zones/<zone>`) | `SDN.Audit SDN.Allocate SDN.Use` |
+| WireGuard VPN | `/vms/<gateway VMID>` | `VM.Audit VM.GuestAgent.Unrestricted`¹ |
+| Backups | `/pool/customers`, `/storage/<backup storage>` | `VM.Backup VM.Config.HWType VM.Config.CDROM` · `Datastore.AllocateSpace Datastore.Audit` |
+| Setup check sees the datacenter firewall (optional) | `/` with `--propagate 0` | `Sys.Audit` |
+
+¹ Proxmox VE 8: `VM.Monitor` instead of `VM.GuestAgent.*`.
+
+```bash
+# Customer networks
+pveum role add PanelNetwork --privs "SDN.Audit SDN.Allocate SDN.Use"
+pveum acl modify /sdn --users panel@pve --roles PanelNetwork
+
+# WireGuard gateway (VMID 150)
+pveum role add PanelGateway --privs "VM.Audit VM.GuestAgent.Unrestricted"
+pveum acl modify /vms/150 --users panel@pve --roles PanelGateway
+
+# Optional, read-only: lets the setup check see the datacenter firewall
+pveum role add PanelAudit --privs "Sys.Audit"
+pveum acl modify / --users panel@pve --roles PanelAudit --propagate 0
+```
+
+Full list with explanations: [Prepare Proxmox VE](https://sebastianflint.github.io/pve-panel/docs/installation/proxmox).
+
 ---
 
 ## 2. Configure PVE Panel
