@@ -33,9 +33,18 @@
   --sans: "Instrument Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
   --mono: "JetBrains Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
 
-  --r-sm: 8px;
-  --r-md: 12px;
-  --r-lg: 16px;
+  --r-sm: 10px;    /* controls */
+  --r-md: 14px;    /* inner boxes, notices */
+  --r-lg: 18px;    /* cards */
+  --r-xl: 24px;    /* large panels (network map) */
+
+  /* Depth: soft, ink-tinted, layered shadows instead of hard boxes */
+  --shadow-1: 0 1px 2px rgb(16 24 40 / 0.05), 0 1px 3px rgb(16 24 40 / 0.04);
+  --shadow-2: 0 1px 2px rgb(16 24 40 / 0.05), 0 8px 24px -6px rgb(16 24 40 / 0.12);
+  --shadow-pop: 0 24px 60px -12px rgb(16 24 40 / 0.30);
+  --edge: color-mix(in srgb, var(--line) 78%, var(--surface));  /* card borders, softer than lines */
+  --tint: color-mix(in srgb, var(--signal) 10%, var(--surface));
+  --tint-ink: color-mix(in srgb, var(--signal) 78%, var(--ink));
 
   color-scheme: light dark;
 }
@@ -55,6 +64,16 @@
     --danger: #f07171;
     --side: #0b121a;
     --idle: #5d6d7d;
+  }
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --shadow-1: 0 1px 0 rgb(255 255 255 / 0.03) inset, 0 1px 3px rgb(0 0 0 / 0.35);
+    --shadow-2: 0 1px 0 rgb(255 255 255 / 0.04) inset, 0 10px 28px -8px rgb(0 0 0 / 0.55);
+    --shadow-pop: 0 24px 60px -12px rgb(0 0 0 / 0.7);
+    --edge: color-mix(in srgb, var(--line) 85%, var(--surface));
+    --tint: color-mix(in srgb, var(--signal) 14%, var(--surface));
+    --tint-ink: color-mix(in srgb, var(--signal) 70%, var(--ink));
   }
 }
 
@@ -731,6 +750,148 @@ dialog#twofa-admin { max-width: min(540px, calc(100vw - 32px)); }
 .about a { color: var(--signal); }
 
 /* =========================================================================
+   Refresh: depth, icon tiles, segmented tabs (v1.15)
+   Everything is derived from the scheme tokens above, so all color schemes
+   (light and dark) follow. Kept before "Small screens" so mobile rules win.
+   ========================================================================= */
+body { font-feature-settings: "ss01", "cv11"; }
+h1, h2, h3 { letter-spacing: -0.015em; }
+
+/* Controls */
+.btn { min-height: 40px; padding: 9px 15px; border-color: var(--edge); box-shadow: var(--shadow-1); }
+.btn:hover:not(:disabled) { background: var(--surface-2); }
+.btn:active:not(:disabled) { transform: translateY(1px); }
+.btn.primary {
+  box-shadow: 0 1px 2px color-mix(in srgb, var(--signal) 40%, transparent),
+              0 6px 16px -6px color-mix(in srgb, var(--signal) 60%, transparent);
+}
+.btn.primary:hover:not(:disabled) { background: color-mix(in srgb, var(--signal) 88%, var(--ink)); }
+.btn.ghost, .btn.ghost:hover:not(:disabled) { box-shadow: none; }
+.btn .icon { opacity: 0.9; }
+input, textarea, select { border-color: var(--edge); min-height: 42px; }
+textarea { min-height: 0; }
+input:hover:not(:focus):not(:disabled), select:hover:not(:focus):not(:disabled), textarea:hover:not(:focus) {
+  border-color: color-mix(in srgb, var(--ink) 22%, var(--line));
+}
+input[type="checkbox"], input[type="radio"] { min-height: 0; accent-color: var(--signal); }
+input:focus, textarea:focus, select:focus { box-shadow: 0 0 0 4px color-mix(in srgb, var(--signal) 16%, transparent); }
+
+/* Power buttons: the icon says what the action does */
+.power .btn:not(:disabled)[data-power="shutdown"] .icon,
+.power .btn:not(:disabled)[data-power="reboot"] .icon { color: var(--tint-ink); }
+.power .btn.danger:not(:disabled) .icon { color: var(--danger); }
+
+/* Status */
+.pill { box-shadow: inset 0 0 0 1px color-mix(in srgb, currentColor 18%, transparent); }
+.pill-running::before { box-shadow: 0 0 0 3px color-mix(in srgb, var(--run) 25%, transparent); }
+
+/* Cards: one family, three sizes */
+.specs, .chart, .rows, .table-wrap, .snap-list, .security-card, .check-list, .schedule-form {
+  border-color: var(--edge); box-shadow: var(--shadow-1);
+}
+.map-card { border-radius: var(--r-xl); border-color: var(--edge); box-shadow: var(--shadow-2); }
+.specs { background: var(--edge); }
+
+/* Facts with an icon tile */
+.specs > div { position: relative; padding: 16px 18px 16px 66px; min-height: 76px; }
+.specs dt { display: block; }
+.spec-ico {
+  position: absolute; left: 18px; top: 50%; transform: translateY(-50%);
+  width: 36px; height: 36px; border-radius: 11px; display: grid; place-items: center;
+  background: var(--tint); color: var(--tint-ink);
+}
+.specs dd { font-size: 16px; }
+.specs .wide .spec-ico { top: 18px; transform: none; }
+
+/* Section headings with a small icon */
+.head-icon { display: inline-block; vertical-align: -3px; margin-right: 9px; color: var(--tint-ink); }
+.title-ico {
+  display: inline-grid; place-items: center; width: 34px; height: 34px; border-radius: 10px;
+  background: var(--tint); color: var(--tint-ink); flex: none;
+}
+
+/* Tabs: a segmented control instead of an underline */
+.tabs {
+  box-shadow: none; display: flex; width: fit-content; max-width: 100%;
+  gap: 2px; padding: 4px; border-radius: 14px;
+  background: color-mix(in srgb, var(--line) 55%, transparent);
+  border: 1px solid color-mix(in srgb, var(--line) 60%, transparent);
+}
+.tab {
+  border-bottom: 0; border-radius: 10px; padding: 8px 14px; gap: 8px; color: var(--muted);
+  transition: background-color .15s, color .15s, box-shadow .15s;
+}
+.tab .icon { opacity: 0.8; }
+.tab:hover { color: var(--ink); background: color-mix(in srgb, var(--surface) 55%, transparent); }
+.tab[aria-selected="true"] { background: var(--surface); color: var(--ink); box-shadow: var(--shadow-1); }
+.tab[aria-selected="true"] .icon { color: var(--signal); opacity: 1; }
+.segmented { border-radius: 12px; padding: 4px; }
+.segmented button { border-radius: 8px; }
+.segmented button[aria-pressed="true"] { box-shadow: var(--shadow-1); }
+
+/* Sidebar: icon chips, a lit active item */
+.sidebar { padding: 22px 14px 16px; }
+.side-top .brand-mark { box-sizing: content-box; padding: 5px; border-radius: 11px; background: var(--side-active); }
+.nav { gap: 3px; }
+.nav-item { padding: 6px 8px; border-radius: 12px; font-weight: 500; }
+.nav-item .icon {
+  box-sizing: content-box; padding: 7px; border-radius: 9px;
+  background: var(--side-hover); color: var(--side-ink);
+}
+.nav-item:hover .icon { background: var(--side-active); }
+.nav-item[aria-current="true"] { background: var(--side-active); }
+.nav-item[aria-current="true"] .icon { background: var(--signal); color: var(--signal-ink); }
+.unit { border-radius: 12px; padding: 7px 8px; }
+.unit-glyph { border-radius: 10px; }
+.unit[aria-current="true"] .unit-glyph { background: color-mix(in srgb, var(--signal) 40%, var(--side-active)); }
+.count { font-weight: 600; }
+
+/* Page and server headers */
+.page-head h1, .detail-head h1, .admin h1 { font-size: 30px; font-weight: 700; letter-spacing: -0.025em; }
+.server-title h1 { letter-spacing: -0.025em; }
+.os-tile { border-radius: 13px; box-shadow: inset 0 0 0 1px color-mix(in srgb, currentColor 14%, transparent); }
+.os-tile.big { border-radius: 17px; }
+
+/* Overview list */
+.server-row { padding: 14px 18px; transition: background-color .15s; }
+.server-row:hover { background: color-mix(in srgb, var(--signal) 5%, var(--surface)); }
+.meter { height: 6px; border-radius: 99px; }
+.meter > i { border-radius: 99px; }
+
+/* Charts */
+.chart { padding: 16px 18px 12px; }
+.chart h3 { font-size: 13.5px; color: var(--muted); font-weight: 600; }
+.chart h3 span { font-size: 15px; }
+
+/* Danger zone: calm, still clearly different */
+.danger-zone {
+  background: color-mix(in srgb, var(--danger) 3%, var(--surface));
+  border-color: color-mix(in srgb, var(--danger) 26%, var(--edge));
+}
+
+/* Tables */
+.table th { background: transparent; font-weight: 600; padding: 12px 16px; }
+.table tbody tr { transition: background-color .12s; }
+.table tbody tr:hover td { background: color-mix(in srgb, var(--signal) 3.5%, var(--surface)); }
+.icon-btn.act { border-radius: 9px; }
+
+/* Notices and dialogs */
+
+/* Admin */
+.topbar { box-shadow: 0 1px 0 rgb(255 255 255 / 0.04) inset; }
+.topbar .brand-mark { box-sizing: content-box; padding: 4px; border-radius: 10px; background: var(--side-active); }
+.admin .tabs { margin-top: 20px; margin-bottom: 26px; }
+.security-card { border-radius: var(--r-lg); }
+.settings-card .twofa-title { gap: 12px; }
+
+/* Sign-in: the form sits on a card */
+.login-panel { background: radial-gradient(1200px 600px at 100% 0%, var(--tint), transparent 60%), var(--bg); }
+.login-box {
+  width: min(420px, 100%); padding: 34px 32px; border-radius: var(--r-xl);
+  background: var(--surface); border: 1px solid var(--edge); box-shadow: var(--shadow-2);
+}
+
+/* =========================================================================
    Toasts & dialogs
    ========================================================================= */
 .toasts { position: fixed; right: 18px; bottom: 18px; display: grid; gap: 8px; z-index: 10; max-width: min(400px, calc(100% - 36px)); }
@@ -755,6 +916,21 @@ dialog p { margin: 0 0 20px; }
 #prompt input { font-family: var(--mono); margin-top: 6px; min-width: min(340px, 70vw); }
 #prompt-hint { margin: 8px 0 20px; font-size: 13px; }
 
+/* Refresh for dialogs and toasts (after their base rules above) */
+dialog { border-color: var(--edge); border-radius: var(--r-xl); box-shadow: var(--shadow-pop); padding: 26px; }
+dialog::backdrop { backdrop-filter: blur(4px); }
+.toast { border-radius: 12px; box-shadow: var(--shadow-pop); }
+.page > .h2, .page .h2 { margin-top: 36px; }
+.create-form fieldset { border-color: var(--edge); box-shadow: var(--shadow-1); }
+.choice { border-color: var(--edge); align-items: center; transition: border-color .15s, background-color .15s; }
+.choice:hover:not(:has(input:disabled)) { border-color: color-mix(in srgb, var(--signal) 45%, var(--line)); }
+.choice input { margin-top: 0; }
+.choice-ico { width: 36px; height: 36px; border-radius: 11px; }
+.choices { grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); }
+.segmented button { white-space: nowrap; }
+.section-head { flex-wrap: wrap; }
+.section-head h2 { white-space: nowrap; display: flex; align-items: center; }
+
 /* =========================================================================
    Small screens
    ========================================================================= */
@@ -777,6 +953,8 @@ dialog p { margin: 0 0 20px; }
   .qr { max-width: 220px; }
   .specs.cols-3 { grid-template-columns: 1fr; }
   .specs { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  /* an odd fact before the full-width one takes the whole row (no empty cell) */
+  .specs:not(.cols-3) > div:nth-child(odd):nth-last-child(2) { grid-column: 1 / -1; }
   .shell { background: var(--bg); }
   .map-card { overflow-x: auto; }
   .netmap { min-width: 600px; }
@@ -913,7 +1091,7 @@ dialog p { margin: 0 0 20px; }
 .setup-options { gap: 22px; flex-wrap: wrap; margin: 6px 0 8px; }
 .setup-options .check { margin: 0; }
 .check-group { margin-top: 22px; }
-.check-group-title { font-size: 13px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; color: var(--muted); margin: 0 0 8px; }
+.check-group-title { font-size: 15px; font-weight: 700; color: var(--ink); margin: 0 0 10px; }
 .check-list { list-style: none; margin: 0; padding: 0; border: 1px solid var(--line); border-radius: var(--r-lg); background: var(--surface); }
 .check-item { display: grid; grid-template-columns: 26px 1fr; gap: 12px; padding: 12px 16px; border-bottom: 1px solid var(--line); }
 .check-item:last-child { border-bottom: 0; }
