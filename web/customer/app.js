@@ -235,7 +235,7 @@ function renderHome() {
       </section>
       ${n ? `
         <section class="server-list">
-          <h2 class="h2">Servers</h2>
+          <h2 class="h2">${icon('server', { size: 18, cls: 'head-icon' })}Servers</h2>
           <ul class="rows">${state.vms.map(serverRow).join('')}</ul>
         </section>` : ''}
     </div>`;
@@ -370,12 +370,12 @@ function renderOverview(body) {
 
   body.innerHTML = `
     <dl class="specs">
-      <div><dt>Server ID</dt><dd class="mono">${vm.vmid}</dd></div>
-      <div><dt>Operating system</dt><dd>${esc(OS_NAMES[vm.os] ?? vm.os ?? '–')}</dd></div>
-      <div><dt>CPU cores</dt><dd>${vm.cores ?? '–'}</dd></div>
-      <div><dt>Memory</dt><dd>${vm.memoryMb ? bytes(vm.memoryMb * 1024 * 1024) : bytes(vm.maxmem)}</dd></div>
-      <div><dt>Disk</dt><dd>${bytes(vm.maxdisk)}</dd></div>
-      <div class="wide"><dt>IP addresses</dt><dd>${ips}</dd></div>
+      <div><dt>${specIcon('hash')}Server ID</dt><dd class="mono">${vm.vmid}</dd></div>
+      <div><dt>${specIcon(vm.os === 'windows' ? 'windows' : 'linux')}Operating system</dt><dd>${esc(OS_NAMES[vm.os] ?? vm.os ?? '–')}${vm.type === 'lxc' ? ' <span class="muted">(container)</span>' : ''}</dd></div>
+      <div><dt>${specIcon('cpu')}CPU cores</dt><dd>${vm.cores ?? '–'}</dd></div>
+      <div><dt>${specIcon('memory')}Memory</dt><dd>${vm.memoryMb ? bytes(vm.memoryMb * 1024 * 1024) : bytes(vm.maxmem)}</dd></div>
+      <div><dt>${specIcon('disk')}Disk</dt><dd>${bytes(vm.maxdisk)}</dd></div>
+      <div class="wide"><dt>${specIcon('globe')}IP addresses</dt><dd>${ips}</dd></div>
     </dl>
     ${vm.pendingSize ? `
       <div class="notice warn size-pending">
@@ -388,7 +388,7 @@ function renderOverview(body) {
       <div class="row size-row"><button class="btn" data-resize>${icon('server')}<span>Change size…</span></button></div>` : ''}
 
     <div class="section-head">
-      <h2>Usage</h2>
+      <h2>${icon('chart', { size: 18, cls: 'head-icon' })}Usage</h2>
       <div class="segmented" role="group" aria-label="Time range">
         ${[['hour', '1 hour'], ['day', '1 day'], ['week', '1 week'], ['month', '1 month']].map(([tf, label]) =>
           `<button data-tf="${tf}" aria-pressed="${state.timeframe === tf}">${label}</button>`).join('')}
@@ -436,12 +436,24 @@ async function loadCharts() {
   } catch (err) { fail(err); }
 }
 
+/** OS tile for an image choice: Windows, Linux, or a container. */
+const imageIcon = (t) => {
+  const os = t.setup === 'windows' ? 'windows' : 'linux';
+  return `<span class="os-tile choice-ico os-${os}">${t.kind === 'container' ? icon('layers', { size: 18 }) : osIcon(os, 18)}</span>`;
+};
+
+/** A small tinted icon tile in front of a fact (server page). */
+const specIcon = (name) => `<span class="spec-ico">${icon(name, { size: 18 })}</span>`;
+
 /** Minimal dependency-free SVG area/line chart. */
 function chart(title, current, series, fixedMax, legend) {
   const W = 300, H = 90;
   const all = series.flat().filter((v) => v != null);
   const max = fixedMax ?? Math.max(1, ...all) * 1.1;
   const colors = ['var(--chart-a)', 'var(--chart-b)'];
+  const gid = `g${Math.random().toString(36).slice(2, 8)}`;
+  const defs = `<defs><linearGradient id="${gid}" x1="0" y1="0" x2="0" y2="1">
+    <stop offset="0" stop-color="var(--chart-a)" stop-opacity="0.24"/><stop offset="1" stop-color="var(--chart-a)" stop-opacity="0.02"/></linearGradient></defs>`;
 
   const paths = series.map((values, i) => {
     const n = values.length;
@@ -454,14 +466,14 @@ function chart(title, current, series, fixedMax, legend) {
       d += `${d ? 'L' : 'M'}${x.toFixed(1)},${y.toFixed(1)}`;
     });
     if (!d) return '';
-    const area = i === 0 ? `<path d="${d}L${W},${H}L0,${H}Z" fill="${colors[i]}" opacity="0.12"/>` : '';
-    return `${area}<path d="${d}" fill="none" stroke="${colors[i]}" stroke-width="1.5" vector-effect="non-scaling-stroke"/>`;
+    const area = i === 0 ? `<path d="${d}L${W},${H}L0,${H}Z" fill="url(#${gid})"/>` : '';
+    return `${area}<path d="${d}" fill="none" stroke="${colors[i]}" stroke-width="2" stroke-linejoin="round" stroke-linecap="round" vector-effect="non-scaling-stroke"/>`;
   }).join('');
 
   return `
     <figure class="chart" style="margin:0">
       <h3>${esc(title)} <span>${esc(current)}</span></h3>
-      <svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" role="img" aria-label="${esc(title)} over time">${paths}</svg>
+      <svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" role="img" aria-label="${esc(title)} over time">${defs}${paths}</svg>
       ${legend ? `<div class="legend">${legend.map((l, i) => `<span><i style="background:${colors[i]}"></i>${esc(l)}</span>`).join('')}</div>` : ''}
     </figure>`;
 }
@@ -544,12 +556,12 @@ async function renderRemote(body) {
     body.innerHTML = `
       <div class="ts">
         <dl class="specs cols-3">
-          <div><dt>Tailscale</dt><dd><span class="pill ${online ? 'pill-running' : ''}">${live
+          <div><dt>${specIcon('link')}Tailscale</dt><dd><span class="pill ${online ? 'pill-running' : ''}">${live
             ? (online ? 'Connected' : esc(live.backend === 'NeedsLogin' ? 'Signed out' : 'Offline'))
             : (vm.status === 'running' ? 'Status unknown' : 'Server stopped')}</span></dd></div>
-          <div><dt>Tailscale address</dt><dd class="mono">${esc(live?.ip ?? ts.ip ?? '–')}</dd></div>
-          <div><dt>Name in your tailnet</dt><dd class="mono">${esc(live?.name ?? ts.hostname ?? '–')}</dd></div>
-          <div class="wide"><dt>Mode</dt><dd>${ts.mode === 'gateway'
+          <div><dt>${specIcon('globe')}Tailscale address</dt><dd class="mono">${esc(live?.ip ?? ts.ip ?? '–')}</dd></div>
+          <div><dt>${specIcon('server')}Name in your tailnet</dt><dd class="mono">${esc(live?.name ?? ts.hostname ?? '–')}</dd></div>
+          <div class="wide"><dt>${specIcon('network')}Mode</dt><dd>${ts.mode === 'gateway'
             ? `Gateway to your private network <span class="mono">${esc(ts.subnet ?? '')}</span>`
             : 'Just this server'}</dd></div>
         </dl>
@@ -823,6 +835,7 @@ function renderCreate() {
               <label class="choice">
                 <input type="radio" name="templateId" value="${t.id}" ${t === first ? 'checked' : ''}
                        ${t.minDiskGb > left.diskGb ? 'disabled' : ''}>
+                ${imageIcon(t)}
                 <span><strong>${esc(t.name)}${t.kind === 'container' ? ' <span class="tag choice-tag">Container</span>' : ''}</strong>
                 <span class="muted">Needs at least ${t.minDiskGb} GB disk</span></span>
               </label>`).join('')}
@@ -1469,6 +1482,7 @@ function renderReinstall(vm) {
             ${state.templates.map((t) => `
               <label class="choice">
                 <input type="radio" name="templateId" value="${t.id}" ${t === first ? 'checked' : ''} ${fits(t) ? '' : 'disabled'}>
+                ${imageIcon(t)}
                 <span><strong>${esc(t.name)}</strong>
                 <span class="muted">${t.id === vm.templateId ? 'Current image' : fits(t) ? `Needs at least ${t.minDiskGb} GB disk` : `Needs ${t.minDiskGb} GB, more than this server has`}</span></span>
               </label>`).join('')}

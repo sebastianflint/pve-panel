@@ -163,14 +163,15 @@ export function createAdmin({ root, api, toast, fail, confirmAction, promptText,
 
   // ---- shell ------------------------------------------------------------
   function render() {
-    const tabs = [['servers', 'Servers'], ['users', 'Customers'], ['templates', 'Templates'], ['vpn', 'VPN'], ['activity', 'Activity'], ['account', 'Your account'], ['settings', 'Settings'], ['setup', 'Setup check'], ['about', 'About']];
+    const tabs = [['servers', 'Servers', 'server'], ['users', 'Customers', 'users'], ['templates', 'Templates', 'layers'], ['vpn', 'VPN', 'shield'],
+      ['activity', 'Activity', 'pulse'], ['account', 'Your account', 'user'], ['settings', 'Settings', 'gear'], ['setup', 'Setup check', 'check'], ['about', 'About', 'info']];
     const count = (id) => (id === 'setup' && st.setupProblems ? ` <span class="tab-count" title="Problems found">${st.setupProblems}</span>` : '');
     root.innerHTML = `
       <div class="admin-inner">
         <h1>Administration</h1>
         <div class="tabs" role="tablist">
-          ${tabs.map(([id, label]) =>
-            `<button class="tab" role="tab" data-admin-tab="${id}" aria-selected="${st.tab === id}">${label}${count(id)}</button>`).join('')}
+          ${tabs.map(([id, label, ic]) =>
+            `<button class="tab" role="tab" data-admin-tab="${id}" aria-selected="${st.tab === id}">${icon(ic, { size: 16 })}<span>${label}</span>${count(id)}</button>`).join('')}
         </div>
         <section id="admin-body"></section>
       </div>`;
@@ -971,7 +972,7 @@ export function createAdmin({ root, api, toast, fail, confirmAction, promptText,
       <div class="settings">
         <section class="security-card settings-card">
           <div class="settings-head">
-            <h2 class="twofa-title">Appearance</h2>
+            <h2 class="twofa-title"><span class="title-ico">${icon('palette', { size: 18 })}</span>Appearance</h2>
             <p class="muted">The color scheme for everyone: this admin interface, the customer portal, the sign-in pages
               and emails. Each scheme has a light and a dark variant; the panel follows each device's light/dark setting.</p>
           </div>
@@ -997,7 +998,7 @@ export function createAdmin({ root, api, toast, fail, confirmAction, promptText,
 
         <section class="security-card settings-card">
           <div class="settings-head">
-            <h2 class="twofa-title">Email <span class="pill ${e.configured ? 'pill-running' : ''}">${e.configured ? 'Configured' : 'Not set up'}</span></h2>
+            <h2 class="twofa-title"><span class="title-ico">${icon('mail', { size: 18 })}</span>Email <span class="pill ${e.configured ? 'pill-running' : ''}">${e.configured ? 'Configured' : 'Not set up'}</span></h2>
             <p class="muted">Used to send invitations to new users. Settings are stored in the panel's database; the
               password is kept encrypted and never shown again.</p>
           </div>
@@ -1039,7 +1040,7 @@ export function createAdmin({ root, api, toast, fail, confirmAction, promptText,
 
         <section class="security-card settings-card">
           <div class="settings-head">
-            <h2 class="twofa-title">Windows updates</h2>
+            <h2 class="twofa-title"><span class="title-ico">${icon('windows', { size: 18 })}</span>Windows updates</h2>
             <p class="muted">Customers can install Windows updates on their Windows servers from the server page
               (Updates tab): security or all quality updates, optionally with a snapshot first and automatic restarts.
               Feature upgrades and previews are never installed.</p>
@@ -1050,7 +1051,7 @@ export function createAdmin({ root, api, toast, fail, confirmAction, promptText,
 
         <section class="security-card settings-card">
           <div class="settings-head">
-            <h2 class="twofa-title">Backups</h2>
+            <h2 class="twofa-title"><span class="title-ico">${icon('archive', { size: 18 })}</span>Backups</h2>
             <p class="muted">Customers back up their servers, restore them and — with a Proxmox Backup Server — download
               single files from a backup (Backups tab on the server page). Backups go to the storage chosen here; the
               panel uses the Proxmox API, so it never needs the backup server's credentials. Backups of your own Proxmox
@@ -1084,7 +1085,7 @@ export function createAdmin({ root, api, toast, fail, confirmAction, promptText,
 
         <section class="security-card settings-card">
           <div class="settings-head">
-            <h2 class="twofa-title">Server expiry</h2>
+            <h2 class="twofa-title"><span class="title-ico">${icon('calendar', { size: 18 })}</span>Server expiry</h2>
             <p class="muted">For customers or servers you give an expiry date (customer: <em>Limits</em>; server: the
               clock button in <em>Servers</em>). Reminders by email, stopped at expiry, deleted after the grace period —
               only servers the customer created; servers you assigned are only stopped.</p>
@@ -1118,7 +1119,7 @@ export function createAdmin({ root, api, toast, fail, confirmAction, promptText,
 
         <section class="security-card settings-card" ${e.configured ? '' : 'hidden'}>
           <div class="settings-head">
-            <h2 class="twofa-title">Send a test email</h2>
+            <h2 class="twofa-title"><span class="title-ico">${icon('mail', { size: 18 })}</span>Send a test email</h2>
             <p class="muted">Checks the settings end to end: connection, encryption, sign-in and delivery.</p>
           </div>
           <form id="email-test" class="vpn-form" novalidate>
