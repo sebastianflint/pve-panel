@@ -2,7 +2,8 @@
 
 # PVE Panel
 
-<img width="2172" height="724" alt="pve-panel Server-Dashboard-Logo" src="https://github.com/user-attachments/assets/209ffb96-80ac-4f8d-94ee-7867257c1d73" />
+<img width="2172" height="724" alt="Logo" src="https://github.com/user-attachments/assets/c571d88b-53b7-468e-afb9-e7473ee1a833" />
+
 
 
 ### A modern self-service portal for Proxmox VE
