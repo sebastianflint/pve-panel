@@ -2,6 +2,9 @@
 
 # PVE Panel
 
+<img width="2172" height="724" alt="pve-panel Server-Dashboard-Logo" src="https://github.com/user-attachments/assets/209ffb96-80ac-4f8d-94ee-7867257c1d73" />
+
+
 ### A modern self-service portal for Proxmox VE
 
 Give users a clean, secure interface to manage **only their own virtual machines and containers** — without exposing the Proxmox VE interface or API credentials.
