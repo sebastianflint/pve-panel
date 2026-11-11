@@ -9,7 +9,7 @@ import { prepareSignIn, resumeSso } from '/shared/signin.js';
 import { renderPasskeys } from '/shared/passkeys.js';
 
 const brandReady = applyBrand();
-document.querySelectorAll('[data-brand-mark]').forEach((el) => { el.innerHTML = brandMark(30); });
+document.querySelectorAll('[data-brand-mark]').forEach((el) => { el.innerHTML = brandMark(32); });
 
 setUnauthorizedHandler(() => showLogin());
 

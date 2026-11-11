@@ -74,17 +74,20 @@ const webauthnBrowser = path.join(root, 'node_modules', '@simplewebauthn', 'brow
 // ---- Own icon files (branding folder) ----------------------------------------
 const brandingDir = path.resolve(config.brand.dir || path.join(path.dirname(path.resolve(config.dbPath)), 'branding'));
 const ICON_FILE = /^os-(windows|linux)\.(svg|png|webp)$/;
+const LOGO_FILE = /^logo\.(svg|png|webp)$/;
 
-/** { windows: '/branding/os-windows.svg', … } for the icon files that exist. */
-function osIcons() {
-  const found = {};
+/** { osIcons: { windows: '/branding/os-windows.svg', … }, logo } for the files that exist. */
+function brandingAssets() {
+  const osIcons = {};
+  let logo = null;
   try {
-    for (const f of fs.readdirSync(brandingDir)) {
+    for (const f of fs.readdirSync(brandingDir).sort()) {
       const m = ICON_FILE.exec(f);
-      if (m && !found[m[1]]) found[m[1]] = `/branding/${f}`;
+      if (m && !osIcons[m[1]]) osIcons[m[1]] = `/branding/${f}`;
+      if (!logo && LOGO_FILE.test(f)) logo = `/branding/${f}`;
     }
   } catch { /* no branding folder */ }
-  return found;
+  return { osIcons, logo };
 }
 
 async function brandingFiles(app) {
@@ -92,7 +95,7 @@ async function brandingFiles(app) {
     root: brandingDir,
     prefix: '/branding/',
     decorateReply: false,
-    allowedPath: (p) => ICON_FILE.test(p.replace(/^\//, '')),
+    allowedPath: (p) => { const f = p.replace(/^\//, ''); return ICON_FILE.test(f) || LOGO_FILE.test(f); },
     setHeaders: (res) => {
       // Files added by the operator: never allow scripts, even in an SVG opened directly.
       res.setHeader('Content-Security-Policy', "default-src 'none'; style-src 'unsafe-inline'; sandbox");
@@ -112,7 +115,7 @@ async function buildServer(name, setup) {
   await app.register(cookie);
   await app.register(rateLimit, { global: false });
   // Public: the sign-in page shows the product name before anyone is signed in.
-  app.get('/api/brand', async () => ({ name: config.brand.name, osIcons: osIcons(), scheme: currentScheme() }));
+  app.get('/api/brand', async () => ({ name: config.brand.name, ...brandingAssets(), scheme: currentScheme() }));
   // Liveness for Docker/monitoring: the process runs and the database answers.
   app.get('/healthz', { logLevel: 'warn' }, async (req, reply) => {
     try {
