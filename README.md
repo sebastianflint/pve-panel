@@ -1191,6 +1191,12 @@ Five color schemes — **Harbor** (default), **Forest**, **Ember**, **Orchid**, 
 
 ![Color schemes](docs/screenshots/color-schemes.png)
 
+### Logo
+
+Both portals show the PVE Panel logo next to the product name — on the sign-in pages, in the sidebar and in the admin bar — and use it as the browser tab and home screen icon. The letter follows the color scheme, so the logo fits every scheme in light and dark mode.
+
+To use **your own logo** instead (for example with your own `PANEL_NAME`), put `logo.svg` (or `logo.png` / `logo.webp`) into the branding folder (see below). It replaces the logo in both portals and in the browser tab. A square or slightly wide image works best; it's shown 28–32 px high.
+
 ### Own OS icons
 
 Windows and Linux servers are shown with neutral built-in glyphs. To use your own icons, place any of these files in the branding folder:
@@ -1210,7 +1216,7 @@ volumes:
 BRANDING_DIR=/app/branding
 ```
 
-Only these file names are served, with a strict sandbox policy. Make sure you're allowed to use the images you add.
+Only these file names (`logo.*`, `os-windows.*`, `os-linux.*`) are served, with a strict sandbox policy. Make sure you're allowed to use the images you add.
 
 ---
 

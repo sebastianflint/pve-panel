@@ -244,7 +244,10 @@ label { display: grid; gap: 6px; font-weight: 600; font-size: 14px; }
 }
 .side-top { display: flex; align-items: center; justify-content: space-between; padding: 0 6px 20px; }
 .brand { display: flex; align-items: center; gap: 10px; font-size: 17px; font-weight: 700; letter-spacing: -0.01em; }
-.brand-mark { color: var(--side-ink); }
+.brand-mark { flex: none; display: block; color: var(--side-ink); }
+.brand-mark .bm-p { fill: currentColor; }
+.brand-mark .bm-unit { fill: color-mix(in srgb, currentColor 12%, #3a4a62); }
+img.brand-logo { width: auto; max-width: 180px; object-fit: contain; }
 .login-panel .brand-mark, .admin-login .brand-mark { color: var(--ink); }
 .side-toggle { display: none; color: var(--side-ink); }
 .side-nav { display: flex; flex-direction: column; flex: 1; min-height: 0; }
@@ -831,7 +834,6 @@ input:focus, textarea:focus, select:focus { box-shadow: 0 0 0 4px color-mix(in s
 
 /* Sidebar: icon chips, a lit active item */
 .sidebar { padding: 22px 14px 16px; }
-.side-top .brand-mark { box-sizing: content-box; padding: 5px; border-radius: 11px; background: var(--side-active); }
 .nav { gap: 3px; }
 .nav-item { padding: 6px 8px; border-radius: 12px; font-weight: 500; }
 .nav-item .icon {
@@ -879,7 +881,6 @@ input:focus, textarea:focus, select:focus { box-shadow: 0 0 0 4px color-mix(in s
 
 /* Admin */
 .topbar { box-shadow: 0 1px 0 rgb(255 255 255 / 0.04) inset; }
-.topbar .brand-mark { box-sizing: content-box; padding: 4px; border-radius: 10px; background: var(--side-active); }
 .admin .tabs { margin-top: 20px; margin-bottom: 26px; }
 .security-card { border-radius: var(--r-lg); }
 .settings-card .twofa-title { gap: 12px; }

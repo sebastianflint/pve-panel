@@ -6,11 +6,21 @@ sidebar_position: 4
 **Product name:** set `PANEL_NAME` in `.env` (default `PVE Panel`) and restart. It
 appears on both sign-in pages, in the sidebar and in browser tabs.
 
+**Logo:** both portals show the PVE Panel logo next to the product name — on the sign-in
+pages, in the sidebar and in the admin bar — and use it as the browser tab and home screen
+icon. The letter takes the color of the text around it, so the logo fits every color
+scheme in light and dark mode.
+
+**Own logo:** put `logo.svg` (or `logo.png` / `logo.webp`) into the branding folder (see
+below). It replaces the logo in both portals and in the browser tab, which is useful with
+your own `PANEL_NAME`. A square or slightly wide image works best; it's shown 28–32 px
+high. Browsers that visited before pick it up on the next page load.
+
 **Own OS icons:** the panel shows neutral glyphs for Windows and Linux servers. To
 use your own icons instead, put `os-windows.svg` and/or `os-linux.svg` (or `.png` /
 `.webp`) into the branding folder: `BRANDING_DIR`, default `data/branding/` next to
 the database. With Docker, mount a folder and set `BRANDING_DIR` (see
-`docker-compose.yml`). Only these file names are served, with a strict sandbox
+`docker-compose.yml`). Only these file names (`logo.*`, `os-windows.*`, `os-linux.*`) are served, with a strict sandbox
 policy. Make sure you're allowed to use the images you put there.
 
 ## Color scheme

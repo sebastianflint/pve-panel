@@ -7,7 +7,7 @@ import { signInSecondStep } from '/shared/twofa.js';
 import { prepareSignIn, resumeSso } from '/shared/signin.js';
 
 applyBrand('Administration');
-document.querySelectorAll('[data-brand-mark]').forEach((el) => { el.innerHTML = brandMark(26); });
+document.querySelectorAll('[data-brand-mark]').forEach((el) => { el.innerHTML = brandMark(28); });
 
 let me = null;
 
