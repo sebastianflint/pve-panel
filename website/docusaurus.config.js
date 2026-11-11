@@ -8,7 +8,10 @@ const repo = 'https://github.com/sebastianflint/pve-panel';
 export default {
   title: 'PVE Panel',
   tagline: 'A modern self-service portal for Proxmox VE',
-  favicon: 'img/favicon.svg',
+  favicon: 'img/favicon.ico',
+  headTags: [
+    { tagName: 'link', attributes: { rel: 'apple-touch-icon', href: '/pve-panel/img/apple-touch-icon.png' } },
+  ],
 
   url: 'https://sebastianflint.github.io',
   baseUrl: '/pve-panel/',
@@ -58,9 +61,10 @@ export default {
     /** @type {import('@docusaurus/preset-classic').ThemeConfig} */
     ({
       colorMode: { respectPrefersColorScheme: true },
+      image: 'img/logo.png',
       navbar: {
         title: 'PVE Panel',
-        logo: { alt: 'PVE Panel', src: 'img/logo.svg' },
+        logo: { alt: 'PVE Panel logo', src: 'img/mark.png', srcDark: 'img/mark-dark.png', width: 32, height: 32 },
         items: [
           { type: 'docSidebar', sidebarId: 'docs', position: 'left', label: 'Documentation' },
           { to: '/docs/getting-started/quick-start', label: 'Quick start', position: 'left' },

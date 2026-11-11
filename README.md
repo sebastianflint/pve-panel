@@ -2,7 +2,10 @@
 
 # PVE Panel
 
-<img width="2172" height="724" alt="Logo" src="https://github.com/user-attachments/assets/c571d88b-53b7-468e-afb9-e7473ee1a833" />
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="website/static/img/logo-dark.png">
+  <img width="560" alt="PVE Panel logo" src="website/static/img/logo.png">
+</picture>
 
 
 

@@ -14,11 +14,14 @@ const FEATURES = [
 
 export default function Home() {
   const shot = useBaseUrl('/customer-dashboard.png');
+  const logo = useBaseUrl('/img/logo-dark.png');
   return (
     <Layout title="Self-service portal for Proxmox VE" description="PVE Panel: a modern self-service portal for Proxmox VE">
       <header className={styles.hero}>
         <div className="container">
-          <h1 className={styles.title}>PVE Panel</h1>
+          <h1 className={styles.title}>
+            <img className={styles.logo} src={logo} alt="PVE Panel" width="600" height="159" />
+          </h1>
           <p className={styles.tagline}>
             A modern self-service portal for Proxmox VE. Give customers a clean, secure interface to
             manage <strong>only their own</strong> virtual machines and containers.

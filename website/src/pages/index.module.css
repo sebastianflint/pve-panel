@@ -1,5 +1,6 @@
 .hero { padding: 4.5rem 0 3.5rem; text-align: center; background: linear-gradient(180deg, #172230 0%, #1d2b3c 100%); color: #e8eef6; }
 .title { font-size: 3.2rem; margin-bottom: 0.6rem; letter-spacing: -0.02em; }
+.logo { display: block; width: min(560px, 88vw); height: auto; margin: 0 auto; }
 .tagline { font-size: 1.25rem; max-width: 46rem; margin: 0 auto 2rem; color: #b8c4d3; }
 .buttons { display: flex; gap: 0.8rem; justify-content: center; flex-wrap: wrap; }
 .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 1.2rem; margin: 3rem 0 2.5rem; }
