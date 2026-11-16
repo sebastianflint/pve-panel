@@ -17,6 +17,12 @@ test('customer root reset requires matching passwords and confirmation, then cle
   await page.locator('.unit[data-vmid="'+id+'"]').click();
   await page.locator('[data-root-password]').click();
   const form=page.locator('#root-password-form');
+  await form.locator('[data-generate]').click();
+  const generated=await form.locator('[name=password]').inputValue();
+  expect(generated.length).toBeGreaterThanOrEqual(12);
+  await expect(form.locator('[name=password2]')).toHaveValue(generated);
+  await expect(form.locator('[name=password]')).toHaveAttribute('type','text');
+  expect(requests).toBe(0);
   await form.locator('[name=password]').fill('new-password-123');
   await form.locator('[name=password2]').fill('wrong-password-123');
   await form.locator('[type=submit]').click();

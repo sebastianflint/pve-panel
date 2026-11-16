@@ -1338,7 +1338,12 @@ function openRootPassword() {
     ${crumbs()}<h1>Reset root password</h1>
     <p>Set a new root password for <strong>${esc(vm.name)}</strong>. Its files and SSH keys stay in place.</p>
     <form id="root-password-form" class="create-form">
-      <label>New root password<input type="password" name="password" required minlength="12" maxlength="200" autocomplete="new-password"></label>
+      <label>New root password
+        <span class="with-button">
+          <input type="password" name="password" required minlength="12" maxlength="200" autocomplete="new-password">
+          <button type="button" class="btn" data-generate>Generate</button>
+        </span>
+      </label>
       <label>Repeat new password<input type="password" name="password2" required minlength="12" maxlength="200" autocomplete="new-password"></label>
       <p id="root-password-error" class="form-error" role="alert"></p>
       <div class="form-actions"><button class="btn primary" type="submit">Set root password</button><button class="btn" type="button" data-cancel-root-password>Cancel</button></div>
@@ -1859,9 +1864,14 @@ $('#detail').addEventListener('click', (e) => {
   if (t.hasAttribute('data-open-create')) openCreate();
   if (t.hasAttribute('data-cancel-create')) openHome();
   if (t.hasAttribute('data-generate')) {
-    const input = t.closest('form').password;
+    const form = t.closest('form');
+    const input = form.password;
     input.value = generatePassword();
     input.type = 'text';
+    if (form.id === 'root-password-form') {
+      form.password2.value = input.value;
+      $('#root-password-error').textContent = '';
+    }
   }
   if (t.hasAttribute('data-extend')) { extendExpiry(); return; }
   if (t.hasAttribute('data-root-password')) openRootPassword();
