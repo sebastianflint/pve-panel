@@ -39,6 +39,8 @@ jobs:
       - run: npm ci
       - name: Run unit and API tests
         run: npm test
+      - name: Test restricted LXC password helper
+        run: python3 -m unittest discover -s test/helper
 
   browser:
     name: Browser (Playwright)

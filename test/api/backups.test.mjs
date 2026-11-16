@@ -109,6 +109,11 @@ test('only own backups: other customers, older owners and provider backups', asy
 
   // reassigned to tom: he sees nothing from before, she loses access
   const own = i.backups.find((b) => b.kind === 'manual').id;
+  // Proxmox backup times and assignment timestamps have one-second precision.
+  // Put reassignment strictly after every existing backup, even on fast runners.
+  const newest = Math.max(...i.backups.map((b) => Date.parse(b.time) / 1000));
+  await waitFor(() => Math.floor(Date.now() / 1000) > newest,
+    { timeout: 10_000, interval: 50, what: 'a later assignment second' });
   await admin.put(`/api/admin/vms/${vmid}`, { userId: tom.userId });
   assert.equal((await lena.get(`/api/vms/${vmid}/backups`)).status, 404);
   const t = await info(tom);
@@ -250,3 +255,4 @@ test('deleting the server removes its panel backups', { timeout: 60_000 }, async
   await waitFor(() => own.every((id) => !stack.mock.backups.has(id))
     && dbh.prepare('SELECT COUNT(*) AS n FROM backups WHERE vmid = ?').get(vmid).n === 0, { timeout: 30_000, what: 'the backups to be removed' });
 });
+

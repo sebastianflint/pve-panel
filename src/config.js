@@ -31,6 +31,15 @@ export const config = {
     // Pool that customer servers (including newly created ones) belong to
     pool: process.env.PVE_POOL || 'customers',
   },
+  // Optional, forced-command SSH helper on one Proxmox node (LXC only).
+  ctPasswordReset: {
+    enabled: process.env.CT_PASSWORD_RESET_ENABLED === 'true',
+    node: process.env.CT_PASSWORD_RESET_NODE || '',
+    host: process.env.CT_PASSWORD_RESET_HOST || '',
+    keyFile: process.env.CT_PASSWORD_RESET_KEY_FILE || '',
+    knownHostsFile: process.env.CT_PASSWORD_RESET_KNOWN_HOSTS_FILE || '',
+    sshBin: process.env.CT_PASSWORD_RESET_SSH_BIN || 'ssh',
+  },
   // Private network per customer (Proxmox SDN simple zone with SNAT + DHCP)
   network: {
     enabled: process.env.CUSTOMER_NETWORKS === 'true',
@@ -134,5 +143,13 @@ for (const portal of ['customer', 'admin']) {
   const oidcHere = config.oidc.enabled && config.oidc.portals.includes(portal);
   if (!config.auth.password[portal] && !oidcHere) {
     throw new Error(`Password sign-in is off for the ${portal} portal and OIDC isn't enabled there: nobody could sign in`);
+  }
+}
+
+if (config.ctPasswordReset.enabled) {
+  const c = config.ctPasswordReset;
+  if (!/^[A-Za-z0-9][A-Za-z0-9.-]*$/.test(c.host) || !/^[A-Za-z0-9][A-Za-z0-9.-]*$/.test(c.node)
+      || !c.keyFile || !c.knownHostsFile) {
+    throw new Error('CT_PASSWORD_RESET_ENABLED needs a valid HOST, NODE, KEY_FILE and KNOWN_HOSTS_FILE');
   }
 }
