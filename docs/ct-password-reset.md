@@ -1,4 +1,4 @@
-# LXC root password recovery (CasaRiccardo fork)
+# LXC root password recovery
 
 This opt-in feature adds **Reset root password** to the customer's server Overview.
 It works only for running, unlocked, unprivileged LXC containers on the configured
