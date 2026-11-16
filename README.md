@@ -941,6 +941,7 @@ PVE Panel applies:
 Besides VM templates, customers can create **containers** straight from the images Proxmox downloads (*node → local → CT Templates*, e.g. `debian-13-standard`). Nothing to prepare.
 
 - Offer an image in **Templates → Container images (LXC)**: name, disk storage, minimum disk, nesting
+- With customer networks disabled, set the image's **Bridge** and optional **VLAN tag** (1–4094). Blank leaves the interface untagged. The tag is passed to Proxmox on creation and reinstall; tagged interfaces have `firewall=1`. The bridge and uplink must carry that VLAN. With customer networks enabled, the customer's SDN VNet takes precedence and this tag is not applied. Changing an image affects future deployments and reinstalls, not existing containers.
 - always **unprivileged**; sign-in as `root` with password and/or SSH key
 - joins the customer's private network and is **isolated like a VM** (firewall, IP and MAC filter)
 - counted against the plan; resize, reinstall, snapshots, console, backups and restores work

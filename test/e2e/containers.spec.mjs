@@ -10,6 +10,7 @@ test('offer a container image and create a container from it', async ({ page, br
   await adminPage.locator('[data-admin-tab=templates]').click();
   const row = adminPage.locator('tr[data-ct]', { hasText: 'debian-13-standard' });
   await expect(row).toBeVisible();
+  await expect(row.locator('[data-f=vlanTag]')).toHaveCount(0); // SDN controls the network
   await row.locator('[data-f=offered]').check();
   await row.locator('[data-f=label]').fill('Debian 13 (container)');
   await row.locator('[data-f=storage]').selectOption('local-lvm');

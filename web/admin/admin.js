@@ -707,7 +707,7 @@ export function createAdmin({ root, api, toast, fail, confirmAction, promptText,
           <table class="table">
             <thead><tr>
               <th>Image in Proxmox</th><th>Offered</th><th>Name shown to customers</th><th>Disk storage</th>
-              <th>Min. disk (GB)</th>${ct.networksEnabled ? '' : '<th>Bridge</th>'}<th>Nesting</th><th><span class="sr-only">Save</span></th>
+              <th>Min. disk (GB)</th>${ct.networksEnabled ? '' : '<th>Bridge</th><th>VLAN tag</th>'}<th>Nesting</th><th><span class="sr-only">Save</span></th>
             </tr></thead>
             <tbody>
               ${ct.images.map((c, i) => `
@@ -720,6 +720,7 @@ export function createAdmin({ root, api, toast, fail, confirmAction, promptText,
                   </select></td>
                   <td><input data-f="minDiskGb" type="number" min="1" max="1024" value="${esc(c.minDiskGb)}" class="narrow"></td>
                   ${ct.networksEnabled ? '' : `<td><input data-f="bridge" value="${esc(c.bridge)}" maxlength="32" class="narrow mono"></td>`}
+                  ${ct.networksEnabled ? '' : `<td><input data-f="vlanTag" type="number" min="1" max="4094" value="${esc(c.vlanTag ?? '')}" placeholder="Untagged" class="narrow" aria-label="VLAN tag for ${esc(c.file)}"></td>`}
                   <td><input type="checkbox" data-f="nesting" ${c.nesting ? 'checked' : ''} aria-label="Nesting for ${esc(c.file)}"></td>
                   <td><button class="btn" data-save-ct>Save</button></td>
                 </tr>`).join('')}
@@ -727,6 +728,7 @@ export function createAdmin({ root, api, toast, fail, confirmAction, promptText,
           </table>
         </div>
         <p class="muted small"><strong>Disk storage:</strong> where the container's disk is created (content “Container”).
+          ${ct.networksEnabled ? '' : '<strong>VLAN tag:</strong> optional access VLAN (1–4094) on the bridge; blank means untagged. The bridge and uplink must support that VLAN. Tagged containers have their Proxmox firewall flag enabled.'}
           <strong>Nesting:</strong> needed by systemd in current distributions (Debian 12+, Ubuntu 24.04+); keep it on unless you have a reason.
           ${ct.networksEnabled ? 'Containers join the customer\'s private network and are isolated like VMs.' : '<strong>Bridge:</strong> the network the container is connected to (customer networks are off).'}</p>`
         : '<p class="muted">No container images found. Download one in Proxmox: node → local → CT Templates → Templates.</p>'}`;
@@ -797,6 +799,7 @@ export function createAdmin({ root, api, toast, fail, confirmAction, promptText,
           volid: c.volid, node: c.node, label, storage: field('storage').value,
           minDiskGb: Number(field('minDiskGb').value) || 4,
           ...(field('bridge') ? { bridge: field('bridge').value.trim() || 'vmbr0' } : {}),
+          vlanTag: field('vlanTag') ? (field('vlanTag').value === '' ? null : Number(field('vlanTag').value)) : c.vlanTag,
           nesting: field('nesting').checked,
         },
       });

@@ -541,7 +541,7 @@ export default async function adminRoutes(app) {
       return {
         volid: i.volid, node: i.node, file: i.file, size: i.size, shared: i.shared,
         offered: !!row, id: row?.id ?? null, label: row?.label ?? '', storage: row?.storage ?? '',
-        minDiskGb: row?.min_disk_gb ?? 4, bridge: row?.bridge ?? 'vmbr0', nesting: row ? !!row.nesting : true,
+        minDiskGb: row?.min_disk_gb ?? 4, bridge: row?.bridge ?? 'vmbr0', vlanTag: row?.vlan_tag ?? null, nesting: row ? !!row.nesting : true,
       };
     });
     // offered images whose file is gone (deleted in Proxmox)
@@ -566,6 +566,7 @@ export default async function adminRoutes(app) {
           storage: { type: 'string', maxLength: 100, pattern: '^[A-Za-z0-9._-]+$' },
           minDiskGb: { type: 'integer', minimum: 1, maximum: 1024 },
           bridge: { type: 'string', maxLength: 32, pattern: '^[A-Za-z0-9._-]+$' },
+          vlanTag: { type: ['integer', 'null'], minimum: 1, maximum: 4094 },
           nesting: { type: 'boolean' },
         },
       },
@@ -578,10 +579,11 @@ export default async function adminRoutes(app) {
       return badRequest(reply, `The storage ${b.storage} can't hold containers on ${b.node} (content "Container" needed)`);
     }
     db.prepare(`
-      INSERT INTO ct_templates (volid, node, label, storage, min_disk_gb, bridge, nesting) VALUES (?, ?, ?, ?, ?, ?, ?)
+      INSERT INTO ct_templates (volid, node, label, storage, min_disk_gb, bridge, nesting, vlan_tag) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
       ON CONFLICT(volid, node) DO UPDATE SET label = excluded.label, storage = excluded.storage,
-        min_disk_gb = excluded.min_disk_gb, bridge = excluded.bridge, nesting = excluded.nesting
-    `).run(b.volid, b.node, b.label.trim(), b.storage, b.minDiskGb ?? 4, b.bridge ?? 'vmbr0', b.nesting === false ? 0 : 1);
+        min_disk_gb = excluded.min_disk_gb, bridge = excluded.bridge, nesting = excluded.nesting,
+        vlan_tag = CASE WHEN ? THEN excluded.vlan_tag ELSE ct_templates.vlan_tag END
+    `).run(b.volid, b.node, b.label.trim(), b.storage, b.minDiskGb ?? 4, b.bridge ?? 'vmbr0', b.nesting === false ? 0 : 1, b.vlanTag ?? null, Object.hasOwn(b, 'vlanTag') ? 1 : 0);
     const row = db.prepare('SELECT id FROM ct_templates WHERE volid = ? AND node = ?').get(b.volid, b.node);
     forgetImageCache();
     audit(req, null, 'admin_template_offer', { label: b.label, image: b.volid, node: b.node });

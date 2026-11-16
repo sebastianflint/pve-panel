@@ -293,6 +293,9 @@ db.exec(`
   );
 `);
 
+// Optional access VLAN for LXC images when customer SDN networks are disabled.
+addColumn('ct_templates', 'vlan_tag', 'INTEGER CHECK (vlan_tag BETWEEN 1 AND 4094)');
+
 // Background jobs don't survive a restart; don't leave servers stuck forever.
 db.exec(`
   UPDATE vms SET state = 'failed', error = 'Setup was interrupted because the panel restarted'

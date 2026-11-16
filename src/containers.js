@@ -108,9 +108,10 @@ export function containerParams({ vmid, row, spec, net, pool, mac = null }) {
   const nic = [
     'name=eth0',
     `bridge=${net ? net.vnet : row.bridge}`,
+    ...(!net && row.vlan_tag != null ? [`tag=${row.vlan_tag}`] : []),
     ...(mac ? [`hwaddr=${mac}`] : []),
     'ip=dhcp',
-    ...(net ? ['firewall=1'] : []),
+    ...(net || row.vlan_tag != null ? ['firewall=1'] : []),
   ].join(',');
   const params = {
     vmid,
