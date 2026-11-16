@@ -40,7 +40,7 @@ test('admin: every container image in the cluster, and the storages for containe
   assert.match(badStorage.json.error, /can't hold containers/);
   assert.equal((await admin.put('/api/admin/ct-templates', { volid: 'local:iso/x.iso', node: 'pve1', label: 'X', storage: 'local-lvm' })).status, 400);
 
-  const r = await admin.put('/api/admin/ct-templates', { volid: DEBIAN, node: 'pve1', label: 'Debian 13 (container)', storage: 'local-lvm', minDiskGb: 4 });
+  const r = await admin.put('/api/admin/ct-templates', { volid: DEBIAN, node: 'pve1', label: 'Debian 13 (container)', storage: 'local-lvm', minDiskGb: 4, vlanTag: 901 });
   assert.equal(r.status, 200, r.text);
   ctId = `ct-${r.json.id}`;
   const after2 = (await admin.get('/api/admin/templates')).json.containers.find((c) => c.volid === DEBIAN);
