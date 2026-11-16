@@ -10,6 +10,7 @@
   <link rel="apple-touch-icon" href="/shared/apple-touch-icon.png">
   <link rel="stylesheet" href="/shared/styles.css">
   <link rel="stylesheet" href="/console.css">
+  <link rel="stylesheet" href="/vendor/xterm/css/xterm.css">
   <script type="module" src="/console.js"></script>
 </head>
 <body class="console-page">
@@ -17,8 +18,10 @@
     <span class="led" id="console-led"></span>
     <span id="console-title">Connecting…</span>
     <span class="spacer"></span>
+    <button class="btn" id="copy" hidden disabled>Copy selection</button>
     <button class="btn" id="cad" disabled>Send Ctrl+Alt+Del</button>
     <button class="btn" id="paste" disabled>Type clipboard</button>
+    <button class="btn" id="reconnect" disabled>Reconnect</button>
     <button class="btn" id="fullscreen">Full screen</button>
   </header>
   <div id="screen"></div>

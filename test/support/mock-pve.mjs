@@ -41,6 +41,8 @@ export async function startMockPve({ port = 0 } = {}) {
   const send = (res, data, code=200, msg) => { res.writeHead(code, msg || '', {'content-type':'application/json'}); res.end(JSON.stringify({data, message: msg})); };
   const body = (req) => new Promise(r => { let b=''; req.on('data',c=>b+=c); req.on('end',()=>r(Object.fromEntries(new URLSearchParams(b)))); });
   const destroyed = []; // DELETE calls, for assertions
+  const consoleRequests = [];
+  const terminalSessions = [];
 
   const tsApproved = new Set();
   // Container images on the "local" storage, and every container create/restore call
@@ -425,11 +427,37 @@ export async function startMockPve({ port = 0 } = {}) {
     if (rest === '/snapshot' && req.method === 'POST') { const b = await body(req); const v = vms.get(vmid);
       return send(res, task('qmsnapshot', vmid, 800, () => { (v.snaps ??= []).push({ name: b.snapname, description: b.description ?? '', snaptime: Math.floor(Date.now() / 1000), vmstate: b.vmstate ? 1 : 0 }); })); }
     if (rest === '/snapshot') return send(res, [...(vms.get(vmid)?.snaps ?? []), { name: 'current' }]);
-    if (rest === '/vncproxy') return send(res, {port:5900, ticket:'PVEVNC:abc'});
+    if (rest === '/vncproxy') { consoleRequests.push({ vmid, type: 'vnc' }); return send(res, {port:5900, ticket:'PVEVNC:abc'}); }
+    if (rest === '/termproxy') { consoleRequests.push({ vmid, type: 'terminal' }); return send(res, {port:5901, ticket:'PVETERM:abc', user:'panel@pve!panel'}); }
     send(res, null, 501);
   });
   const wss = new WebSocketServer({ noServer: true });
-  srv.on('upgrade', (req, sock, head) => { wss.handleUpgrade(req, sock, head, (ws) => ws.send('RFB 003.008\n')); });
+  srv.on('upgrade', (req, sock, head) => {
+    wss.handleUpgrade(req, sock, head, (ws) => {
+      if (new URL(req.url, 'http://localhost').searchParams.get('port') !== '5901') { ws.send('RFB 003.008\n'); return; }
+      const session = { authenticated: false, inputs: [], sizes: [], pings: 0 };
+      terminalSessions.push(session);
+      ws.once('message', (data) => {
+        if (data.toString() !== 'panel@pve!panel:PVETERM:abc\n') { ws.close(1008); return; }
+        session.authenticated = true;
+        // Fragment the auth reply to exercise stream/packet boundary handling.
+        ws.send(Buffer.from('O'));
+        setTimeout(() => { if (ws.readyState === 1) ws.send(Buffer.from('K\r\nMock CT terminal ready\r\nlogin: ')); }, 10);
+        ws.on('message', (frame) => {
+          const text = frame.toString();
+          if (text === '2') { session.pings++; return; }
+          const size = /^1:(\d+):(\d+):$/.exec(text);
+          if (size) { session.sizes.push({ cols: Number(size[1]), rows: Number(size[2]) }); return; }
+          const input = /^0:(\d+):/.exec(frame.toString('ascii', 0, 30));
+          if (!input) { ws.close(1008); return; }
+          const body = frame.subarray(input[0].length);
+          if (body.length !== Number(input[1])) { ws.close(1008); return; }
+          session.inputs.push(body);
+          ws.send(body);
+        });
+      });
+    });
+  });
 
 
   await new Promise((resolve) => srv.listen(port, '127.0.0.1', resolve));
@@ -437,7 +465,7 @@ export async function startMockPve({ port = 0 } = {}) {
   return {
     url: `http://127.0.0.1:${actualPort}`,
     port: actualPort,
-    vms, sdn, gwFiles, destroyed, perms, cluster, storageStatus, backups, ctImages, ctCreates,
+    vms, sdn, gwFiles, destroyed, perms, cluster, storageStatus, backups, ctImages, ctCreates, consoleRequests, terminalSessions,
     /** GET a control endpoint, e.g. control('/__lose/104/1') */
     control: (p) => fetch(`http://127.0.0.1:${actualPort}/api2/json${p}`, {
       headers: { authorization: 'PVEAPIToken=panel@pve!panel=x' },

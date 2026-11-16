@@ -5,3 +5,12 @@
 }
 .console-bar .spacer { flex: 1; }
 #screen { flex: 1; min-height: 0; }
+#screen.terminal-screen { padding: 10px; background: #111827; overflow: hidden; }
+.terminal-screen .xterm { height: 100%; }
+.console-bar { flex-wrap: wrap; }
+.console-bar button[hidden] { display: none; }
+@media (max-width: 700px) {
+  .console-bar { gap: 6px; padding: 6px; }
+  .console-bar .btn { padding: 6px 8px; font-size: 12px; }
+  #console-title { max-width: 45vw; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+}

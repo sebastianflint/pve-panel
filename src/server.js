@@ -148,6 +148,16 @@ const customer = await buildServer('customer', async (app) => {
     decorateReply: false,
     allowedPath: (p) => p.startsWith('/core/') || p.startsWith('/vendor/'),
   });
+  await app.register(fastifyStatic, {
+    root: path.join(root, 'node_modules', '@xterm', 'xterm'),
+    prefix: '/vendor/xterm/', decorateReply: false,
+    allowedPath: (p) => p === '/lib/xterm.mjs' || p === '/css/xterm.css',
+  });
+  await app.register(fastifyStatic, {
+    root: path.join(root, 'node_modules', '@xterm', 'addon-fit', 'lib'),
+    prefix: '/vendor/xterm-fit/', decorateReply: false,
+    allowedPath: (p) => p === '/addon-fit.mjs',
+  });
 });
 
 // ---- Admin interface --------------------------------------------------------
