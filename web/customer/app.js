@@ -387,6 +387,11 @@ function renderOverview(body) {
     ${vm.resizable && state.account.canCreate ? `
       <div class="row size-row"><button class="btn" data-resize>${icon('server')}<span>Change size…</span></button></div>` : ''}
 
+    ${vm.canResetRootPassword ? `
+      <div class="danger-zone">
+        <div><h2>Root password</h2><p class="muted">Choose a new root password for this container. Existing SSH keys stay valid.</p></div>
+        <button class="btn" data-root-password ${vm.status !== 'running' || vm.locked || vm.expiry?.expired ? 'disabled' : ''}>Reset root password…</button>
+      </div>` : ''}
     <div class="section-head">
       <h2>${icon('chart', { size: 18, cls: 'head-icon' })}Usage</h2>
       <div class="segmented" role="group" aria-label="Time range">
@@ -1324,6 +1329,42 @@ async function extendExpiry() {
   } catch (err) { fail(err); }
 }
 
+// ---------- container root password -----------------------------------------
+function openRootPassword() {
+  const vm = state.detail;
+  if (!vm?.canResetRootPassword || vm.status !== 'running') return;
+  state.view = 'root-password';
+  $('#detail').innerHTML = `<div class="page">
+    ${crumbs()}<h1>Reset root password</h1>
+    <p>Set a new root password for <strong>${esc(vm.name)}</strong>. Its files and SSH keys stay in place.</p>
+    <form id="root-password-form" class="create-form">
+      <label>New root password<input type="password" name="password" required minlength="12" maxlength="200" autocomplete="new-password"></label>
+      <label>Repeat new password<input type="password" name="password2" required minlength="12" maxlength="200" autocomplete="new-password"></label>
+      <p id="root-password-error" class="form-error" role="alert"></p>
+      <div class="form-actions"><button class="btn primary" type="submit">Set root password</button><button class="btn" type="button" data-cancel-root-password>Cancel</button></div>
+    </form></div>`;
+  $('#root-password-form').password.focus();
+}
+async function submitRootPassword(form) {
+  const vm = state.detail;
+  const error = $('#root-password-error');
+  error.textContent = '';
+  if (form.password.value !== form.password2.value) { error.textContent = "The two passwords don't match."; return; }
+  if (!await confirmAction('Change the root password of ' + vm.name + '?', 'Change password')) return;
+  const button = form.querySelector('[type=submit]');
+  button.disabled = true;
+  try {
+    await api('/api/vms/' + vm.vmid + '/root-password', { method: 'POST', body: { password: form.password.value } });
+    form.reset();
+    toast('Root password changed. Your SSH keys still work.');
+    select(vm.vmid);
+  } catch (err) {
+    form.reset();
+    error.textContent = err instanceof SignedOut ? '' : err.message;
+    button.disabled = false;
+  }
+}
+
 // ---------- resize -----------------------------------------------------------
 async function openResize() {
   const vm = state.detail;
@@ -1823,6 +1864,8 @@ $('#detail').addEventListener('click', (e) => {
     input.type = 'text';
   }
   if (t.hasAttribute('data-extend')) { extendExpiry(); return; }
+  if (t.hasAttribute('data-root-password')) openRootPassword();
+  if (t.hasAttribute('data-cancel-root-password')) select(state.detail.vmid);
   if (t.hasAttribute('data-reinstall')) openReinstall();
   if (t.hasAttribute('data-resize')) openResize();
   if (t.hasAttribute('data-back-to-server') && state.detail) select(state.detail.vmid);
@@ -1848,6 +1891,7 @@ $('#detail').addEventListener('input', (e) => {
   if (e.target.name === 'username') e.target.dataset.edited = '1';
 });
 $('#detail').addEventListener('submit', (e) => {
+  if (e.target.id === 'root-password-form') { e.preventDefault(); submitRootPassword(e.target); return; }
   if (e.target.id === 'reinstall-form') {
     e.preventDefault();
     submitReinstall(e.target);

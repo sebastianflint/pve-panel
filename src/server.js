@@ -106,7 +106,7 @@ async function brandingFiles(app) {
 
 async function buildServer(name, setup) {
   const app = Fastify({
-    logger: { base: { server: name } },
+    logger: { base: { server: name }, redact: { paths: ['req.body.password', 'req.body.password2'], censor: '[redacted]' } },
     trustProxy: true, // run behind nginx/Caddy terminating TLS
     bodyLimit: 64 * 1024,
   });

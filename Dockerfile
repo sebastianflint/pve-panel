@@ -17,6 +17,9 @@ ENV NODE_ENV=production \
     ADMIN_HOST=0.0.0.0 \
     DB_PATH=/app/data/panel.db
 
+USER root
+RUN apt-get update && apt-get install -y --no-install-recommends openssh-client && rm -rf /var/lib/apt/lists/*
+
 WORKDIR /app
 
 # Dependencies first (cached as long as package*.json don't change)

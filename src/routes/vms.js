@@ -12,6 +12,7 @@ import { vpnInfoFor } from '../vpn.js';
 import { tailscaleStatus, connectTailscale, disconnectTailscale } from '../tailscale.js';
 import { versionInfo } from '../version.js';
 import { containerIps } from '../containers.js';
+import { ctPasswordResetAvailable, resetCtRootPassword } from '../ct-password.js';
 import { expiryInfo, expirySettings, customerExtend } from '../expiry.js';
 import { updateInfo, startUpdates, refreshForServer } from '../winupdate.js';
 import {
@@ -453,6 +454,7 @@ export default async function vmRoutes(app) {
     return {
       ...summarize(row, { ...guest, ...status, maxcpu: status.cpus ?? guest.maxcpu }),
       os: cfg.ostype ?? null,          // raw Proxmox ostype, e.g. "win11", "l26"
+      canResetRootPassword: ctPasswordResetAvailable(guest) && Number(cfg.unprivileged) === 1 && !cfg.template,
       osFamily: osOf(row, cfg.ostype),  // 'windows' | 'linux' | null
       // for the reinstall form: current image and disk size
       templateId: row.spec ? JSON.parse(row.spec).template ?? null : null,
@@ -467,6 +469,27 @@ export default async function vmRoutes(app) {
       netin: status.netin ?? 0,
       netout: status.netout ?? 0,
     };
+  });
+
+  // Root recovery for an owned, running, unprivileged container only.
+  app.post('/api/vms/:vmid/root-password', {
+    config: { rateLimit: { max: 10, timeWindow: '1 minute', keyGenerator: (req) => req.ip + ':' + req.params.vmid } },
+    schema: { body: {
+      type: 'object', additionalProperties: false, required: ['password'],
+      properties: { password: { type: 'string', minLength: 12, maxLength: 200, pattern: '^[^\\x00-\\x1f\\x7f]+$' } },
+    } },
+  }, async (req, reply) => {
+    const { row, guest, path } = await ownedGuest(req);
+    if (guest.type !== 'lxc') return reply.code(400).send({ error: 'Root password recovery is available for LXC containers only' });
+    if (expiryInfo(row, expirySettings())?.expired) return reply.code(409).send({ error: 'Extend the server before changing its root password' });
+    const [cfg, status] = await Promise.all([pve.get(path + '/config'), pve.get(path + '/status/current')]);
+    if (Number(cfg.unprivileged) !== 1 || cfg.template) return reply.code(409).send({ error: 'Only unprivileged containers are supported' });
+    if (cfg.lock || guest.lock) return reply.code(409).send({ error: 'Wait for the current server operation to finish' });
+    if (status.status !== 'running') return reply.code(409).send({ error: 'Start the container before changing its root password' });
+    await resetCtRootPassword(guest, req.body.password);
+    audit(req, guest.vmid, 'ct_root_password_reset');
+    reply.header('Cache-Control', 'no-store');
+    return { changed: true };
   });
 
   // Power actions
